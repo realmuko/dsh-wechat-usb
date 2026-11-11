@@ -1,0 +1,83 @@
+{
+  "adb": "adb",
+  "serial": "YOUR_DEVICE_SERIAL",
+  "dataDir": "",
+  "ime": {
+    "default": "com.baidu.input_huawei/.ImeService",
+    "inject": "com.android.adbkeyboard/.AdbIME"
+  },
+  "mode": "text",
+  "autoReply": {
+    "enabled": false,
+    "intervalSec": 30,
+    "noMentionIntervalMin": 30,
+    "maxRepliesPerHour": 60,
+    "wakeSessionId": "",
+    "mentionKeywords": [],
+    "whitelistChats": []
+  },
+  "ocr": {
+    "engine": "rapidocr",
+    "python": "python",
+    "vlModel": "qwen3-vl:4b-instruct",
+    "vlUrl": "http://127.0.0.1:11434",
+    "vlMaxWidth": 720,
+    "x": 0,
+    "y": 170,
+    "w": 1080,
+    "h": 1770,
+    "scale": 2
+  },
+  "coords": {
+    "searchIcon": [
+      888,
+      88
+    ],
+    "searchField": [
+      570,
+      160
+    ],
+    "firstResult": [
+      350,
+      438
+    ],
+    "input": [
+      400,
+      2075
+    ],
+    "send": [
+      984,
+      2030
+    ],
+    "back": [
+      47,
+      88
+    ],
+    "tabWechat": [
+      115,
+      2100
+    ],
+    "tabMe": [
+      810,
+      2100
+    ]
+  },
+  "policy": {
+    "maxChars": 200,
+    "minIntervalMs": 5000,
+    "maxPerMinute": 6,
+    "maxPerHour": 40,
+    "allowedChats": [],
+    "blockPatterns": [
+      "\\b\\d{1,3}(\\.\\d{1,3}){3}\\b",
+      "[A-Za-z]:[\\\\/]",
+      "/c/Users/",
+      "\\\\\\\\([A-Za-z0-9_.-]+)\\\\",
+      "platform-tools",
+      "deepseek[\\s-]*harness",
+      "app\\.asar",
+      "\\badb\\b",
+      "\\bdsh\\b"
+    ]
+  }
+}

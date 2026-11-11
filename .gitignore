@@ -1,0 +1,25 @@
+# 运行时数据：截图、审计日志、去重缓存、inbox —— 含真实聊天内容，绝不入库
+data/
+
+# 真实配置：设备序列号、本机路径、白名单群名、唤醒会话 id 等个人信息
+wechat-usb.config.json
+wechat-usb.config.json.tmp
+
+# 依赖
+node_modules/
+
+# 环境变量
+.env
+.env.*
+
+# 临时文件 / 安装备份
+*.tmp
+*.bak
+*.bak-wechat-usb-*
+*.log
+
+# 编辑器 / 系统
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
