@@ -1,0 +1,24 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Prepare config
+        run: Copy-Item wechat-usb.config.example.json wechat-usb.config.json
+      - name: Syntax check
+        run: node --check index.js; node --check client.js; node --check lib/core.js; node --check lib/poller.js; node --check lib/api.js; node --check lib/sessions.js
+      - name: Logic self-test
+        run: node test/poller-selftest.mjs

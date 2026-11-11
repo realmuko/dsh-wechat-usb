@@ -1,0 +1,7 @@
+# dsh-wechat-usb — 微信 USB 工具集
+# 注册 wechat_status / wechat_guard / wechat_shot / wechat_open / wechat_send / wechat_watch
+# 设备与策略配置见 wechat-usb.config.json（坐标、允许项、限频、审计目录）
+- insert:
+    - id: wechat-usb
+      name: dsh-wechat-usb
+      config: {}
