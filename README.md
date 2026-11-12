@@ -56,7 +56,14 @@ cp wechat-usb.config.example.json wechat-usb.config.json   # Windows: copy
 - `qwen-vl` 失败（Ollama 没开、没拉模型、显存不够）会自动退回 `rapidocr`，`wechat_poll_status` 的 `fallback` 字段能看到原因；想换模型就改 `ocr.vlModel`（如 `qwen3-vl:8b`），送图宽度 `ocr.vlMaxWidth`（默认 720px，越大越准越慢）。
 - `ds-vision` 相当于老版的「截图帧」模式，唤醒 prompt 会换成识图版：让它先看图，再按「有 @ 必回 / 无 @ 满间隔参与」判断。
 
-**要不要回由插件判定**：唤醒 prompt 里直接写死这一轮的结论——本轮有 @ → 必须回；无 @ 且距「上次无@参与」「上次发言」都满 `autoReply.noMentionIntervalMin`（默认 30 分钟）→ 可以参与一次；否则只 ack。早期版本只把规则写成一句“无 @ 按 noMentionIntervalMin 参与”，模型每轮自己回忆，容易退化成“没 @ 就不回”。
+**讨论串（thread）**：插件里的一块纯本地状态（内存，不额外调模型/不额外识别）。
+- 有人 @ 你 → 新开一个串，并把「@ 之前那几句」作为上下文写进唤醒 prompt；
+- 串没过期（`autoReply.threadTtlMin`，默认 10 分钟没新消息算散）→ 这个群里后面的新消息都算续聊，可以像真人一样接着回；
+- 串内两条发言至少隔 `autoReply.threadGapSec`（默认 20 秒），**唤醒冷却也按这个走**（续聊不用等 90 秒）——这是“连贯又不刷屏”的关键；
+- 自己主动搭话也算开新串（先登记 pending，真发出去了才成立）；
+- 当前串可以在 `wechat_poll_status` 的 `thread` 字段看到（id / 起因 / 是否存活 / 闲置分钟 / 上下文条数）。
+
+**要不要回由插件判定**：唤醒 prompt 里直接写死这一轮的结论——本轮有 @ → 必须回；无 @ 但讨论串还活着 → 可以接着聊；否则按 `autoReply.noMentionIntervalMin`（默认 30 分钟）决定要不要主动搭一句；都不满足就只 ack。早期版本只把规则写成一句“无 @ 按 noMentionIntervalMin 参与”，模型每轮自己回忆，容易退化成“没 @ 就不回”。
 
 @ 判定本身也做了两层兜底：① 同一句「@昵称」行 30 分钟内只算一次新消息，但算 @ 时会把紧贴新行上方约 3 行也纳入（否则同一个人连着两次 @ 时，第二行被去重吃掉，就会误判成“没 @”）；② 唤醒前会看 inbox 里 5 分钟内还没回过的 `mentionsMe` 条目，只要挂着一条，这轮就升级成“必须回”。
 
