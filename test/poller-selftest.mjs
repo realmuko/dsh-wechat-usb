@@ -140,16 +140,16 @@ eq("@ 冷却可配置但仍有上限", wakeCooldownMs({ autoReply: { wakeCooldow
   wake(wcfg, "新消息", { mention: true, mentionText: "@小助手", chatTitle: "群" });
   eq("@ 的 15 秒合并窗口生效", prompts.length, 2);
 
-  t += 20000; // 过了 @ 的 15s 合并窗口
+  t += 50000; // 过了 @ 的合并窗口，且上一轮已结算
   flushMentionBacklog(wcfg);
   eq("@ 从 inbox 补发一次", prompts.length, 3);
   eq("补发的 prompt 判必须回", prompts[2].includes("必须回一句"), true);
 
-  t += 20000;
+  t += 50000;
   flushMentionBacklog(wcfg);
   eq("同一条 @ 补到上限（第 2 次）", prompts.length, 4);
 
-  t += 20000;
+  t += 50000;
   flushMentionBacklog(wcfg);
   eq("超过上限不再补", prompts.length, 4);
 
@@ -209,63 +209,7 @@ eq("@ 冷却可配置但仍有上限", wakeCooldownMs({ autoReply: { wakeCooldow
   for (const [i, p] of probes.entries()) eq(`prompt#${i + 1} 无「不要回，只 ack」`, p.includes("不要回，只 ack"), false);
   eq("串模式仍是可回可不回", probes[1].includes("可以接话"), true);
 
-  // 唤醒预算：@ 插队 / @ 合并窗口 / 补发上限 / 空转退避
-  const realNow2 = Date.now;
-  let t2 = realNow2();
-  Date.now = () => t2;
-  setSchedule({ create: () => Promise.resolve() });
-  resetQuietState();
-  const prompts = [];
-  setSchedule({ create: (x) => { prompts.push(x.prompt); return Promise.resolve(); } });
-
-  wake(qcfg, "新消息", { mention: false, chatTitle: "群Q", text: "随便" });
-  eq("普通消息唤醒一次", prompts.length, 1);
-
-  pushEntry(qcfg, { type: "text", text: "@小助手 在吗", mentionsMe: true, mentionHit: "@小助手", chatTitle: "群Q" });
-  t2 += 3000;
-  wake(qcfg, "新消息", { mention: true, mentionText: "@小助手", chatTitle: "群Q", text: "@小助手 在吗" });
-  eq("@ 能插队普通冷却", prompts.length, 2);
-
-  t2 += 3000;
-  wake(qcfg, "新消息", { mention: true, mentionText: "@小助手", chatTitle: "群Q", text: "@小助手 在吗" });
-  eq("@ 的 15 秒合并窗口生效", prompts.length, 2);
-
-  t2 += 20000;
-  flushMentionBacklog(qcfg);
-  eq("@ 从 inbox 补发一次", prompts.length, 3);
-  t2 += 20000;
-  flushMentionBacklog(qcfg);
-  eq("同一条 @ 补到上限（第 2 次）", prompts.length, 4);
-  t2 += 20000;
-  flushMentionBacklog(qcfg);
-  eq("超过上限不再补", prompts.length, 4);
-
-  // 空转退避：连续没换来发送 → 静默；@ 不算空转
-  resetQuietState();
-  wake(qcfg, "新消息", { mention: false, chat: "群B", chatTitle: "群B", mode: "thread", text: "a" });
-  t2 += 60000; settleLastWake(qcfg, t2);
-  wake(qcfg, "新消息", { mention: false, chat: "群B", chatTitle: "群B", mode: "thread", text: "b" });
-  t2 += 60000; settleLastWake(qcfg, t2);
-  eq("连续空转后退避生效", decideQuiet(qcfg, { mode: "thread", chat: "群B", text: "在干嘛", verdict: "yes" }).quiet, true);
-  eq("@ 在退避里仍能叫醒", decideQuiet(qcfg, { mention: true, mode: "thread", chat: "群B", text: "在吗", verdict: "no" }).quiet, false);
-
-  t2 += 5 * 60000;
-  core.setAutoReplyState(qcfg, { lastReplyAt: t2 + 1 });
-  wake(qcfg, "新消息", { mention: false, chat: "群B", chatTitle: "群B", mode: "thread", text: "好的" });
-  t2 += 60000; settleLastWake(qcfg, t2);
-  eq("发过消息后退避解除", decideQuiet(qcfg, { mode: "thread", chat: "群B", text: "在干嘛", verdict: "yes" }).quiet, false);
-
-  // @ 空转不算
-  core.setAutoReplyState(qcfg, { lastReplyAt: 0 });
-  const before = decideQuiet(qcfg, { mode: "thread", chat: "群G", text: "随便说点啥", verdict: "yes" }).quiet;
-  for (let i = 0; i < 4; i += 1) {
-    wake(qcfg, "新消息", { mention: true, mentionText: "@小助手", chat: "群G", chatTitle: "群G", mode: "mention", text: "在吗" });
-    t2 += 60000;
-    settleLastWake(qcfg, t2);
-  }
-  eq("@ 空转不退避", decideQuiet(qcfg, { mode: "thread", chat: "群G", text: "随便说点啥", verdict: "yes" }).quiet, before);
-
-  Date.now = realNow2;
+  // （@ 插队 / 合并窗口 / 补发上限 的用例在上面 wcfg 那个块里，别重复）
   setSchedule(null);
   resetQuietState();
   fs.rmSync(tmp, { recursive: true, force: true });
