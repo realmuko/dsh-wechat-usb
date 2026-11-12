@@ -6,8 +6,8 @@ import { __test, setSchedule, pollStatus } from "../lib/poller.js";
 import * as core from "../lib/core.js";
 
 const { normalize, isNoise, diffNewText, classifyFresh, chatKeyOf, buildWakePrompt,
-  mentionHit, mentionScopeText, wakeCooldownMs, wake, flushPendingMention,
-  looksBare, decideQuiet, settleLastWake, resetQuietState } = __test;
+  mentionHit, mentionScopeText, wakeCooldownMs, wake, flushMentionBacklog,
+  looksBare, decideQuiet, settleLastWake, resetQuietState, pushEntry } = __test;
 let failed = 0;
 
 function eq(name, actual, expected) {
@@ -111,23 +111,35 @@ eq("@ 冷却可配置但仍有上限", wakeCooldownMs({ autoReply: { wakeCooldow
   const realNow = Date.now;
   let t = realNow();
   Date.now = () => t;
+  resetQuietState();
 
   wake(wcfg, "新消息", { mention: false, chatTitle: "群" });
   eq("普通消息唤醒一次", prompts.length, 1);
 
-  t += 3000; // 3 秒后有人直接 @
+  // 有人 @ 你：真实流程里 capture 会把这条写进 inbox
+  pushEntry(wcfg, { type: "text", text: "@小助手 在吗", mentionsMe: true, mentionHit: "@小助手", chatTitle: "群" });
+
+  t += 3000; // 3 秒后有人直接 @，还在冷却里
   wake(wcfg, "新消息", { mention: true, mentionText: "@小助手", chatTitle: "群" });
-  eq("@ 被短窗口挡下时记进 pending", Boolean(pollStatus(wcfg).pendingMention), true);
+  eq("@ 被短窗口挡下：不产生新唤醒", prompts.length, 1);
 
   t += 20000; // 过了 @ 的 15s 合并窗口
-  flushPendingMention(wcfg);
-  eq("@ 到点补发一次", prompts.length, 2);
+  flushMentionBacklog(wcfg);
+  eq("@ 从 inbox 补发一次", prompts.length, 2);
   eq("补发的 prompt 判必须回", prompts[1].includes("必须回一句"), true);
+
+  t += 20000;
+  flushMentionBacklog(wcfg);
+  eq("同一条 @ 补到上限（第 2 次）", prompts.length, 3);
+
+  t += 20000;
+  flushMentionBacklog(wcfg);
+  eq("超过上限不再补", prompts.length, 3);
 
   t += 200000; // 冷却彻底过去后的新一波 @
   wake(wcfg, "新消息", { mention: true, mentionText: "@小助手", chatTitle: "群" });
-  eq("新一波 @ 立刻唤醒", prompts.length, 3);
-  eq("新一波 @ 判必须回", prompts[2].includes("本轮有 @ 你"), true);
+  eq("新一波 @ 立刻唤醒", prompts.length, 4);
+  eq("新一波 @ 判必须回", prompts[3].includes("本轮有 @ 你"), true);
 
   Date.now = realNow;
   setSchedule(null);
