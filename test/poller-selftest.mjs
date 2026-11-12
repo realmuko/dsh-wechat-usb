@@ -77,6 +77,19 @@ eq("mentionHit 只有名字没 @ 不算", mentionHit(cfg, "小助手"), null);
   // 老气泡离得远（>130px）就不该被算进来
   const far = [{ text: "@小助手", y: 1000 }, { text: "新的一条", y: 1800 }];
   eq("远处旧 @ 不误判", mentionHit(cfg, mentionScopeText(far, [far[1]])), null);
+
+// 昵称后缀箭头每帧抖动 → normalize 后应当一致，去重才不会失效
+eq("normalize 洗掉箭头", normalize("德师傅↑→↓↓↓：晚上好"), normalize("德师傅↑↓↓：晚上好"));
+
+// 引用头 / 自己气泡的回显：没有「昵称：」前缀，不算有人 @
+{
+  const scope = mentionScopeText(
+    [{ text: "@升天肥鱼：德师傅↑→↓↓↓：动图是这样的", y: 1800 }],
+    [{ text: "九星噩夜：动图是这样的", y: 1830 }],
+    new Map(),
+  );
+  eq("没有昵称前缀的 @ 不算真 @", mentionHit(cfg, scope), null);
+}
 }
 
 // @ 不能被普通消息的 90s 唤醒冷却吞掉
