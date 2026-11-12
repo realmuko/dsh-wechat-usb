@@ -119,27 +119,31 @@ eq("@ 冷却可配置但仍有上限", wakeCooldownMs({ autoReply: { wakeCooldow
   // 有人 @ 你：真实流程里 capture 会把这条写进 inbox
   pushEntry(wcfg, { type: "text", text: "@小助手 在吗", mentionsMe: true, mentionHit: "@小助手", chatTitle: "群" });
 
-  t += 3000; // 3 秒后有人直接 @，还在冷却里
+  t += 3000; // 3 秒后有人直接 @ —— 能插队普通消息的 90s 冷却
   wake(wcfg, "新消息", { mention: true, mentionText: "@小助手", chatTitle: "群" });
-  eq("@ 被短窗口挡下：不产生新唤醒", prompts.length, 1);
+  eq("@ 能插队普通冷却", prompts.length, 2);
+
+  t += 3000; // 6 秒后又一个 @ —— 被 @ 自己的 15 秒合并窗口挡住
+  wake(wcfg, "新消息", { mention: true, mentionText: "@小助手", chatTitle: "群" });
+  eq("@ 的 15 秒合并窗口生效", prompts.length, 2);
 
   t += 20000; // 过了 @ 的 15s 合并窗口
   flushMentionBacklog(wcfg);
-  eq("@ 从 inbox 补发一次", prompts.length, 2);
-  eq("补发的 prompt 判必须回", prompts[1].includes("必须回一句"), true);
+  eq("@ 从 inbox 补发一次", prompts.length, 3);
+  eq("补发的 prompt 判必须回", prompts[2].includes("必须回一句"), true);
 
   t += 20000;
   flushMentionBacklog(wcfg);
-  eq("同一条 @ 补到上限（第 2 次）", prompts.length, 3);
+  eq("同一条 @ 补到上限（第 2 次）", prompts.length, 4);
 
   t += 20000;
   flushMentionBacklog(wcfg);
-  eq("超过上限不再补", prompts.length, 3);
+  eq("超过上限不再补", prompts.length, 4);
 
   t += 200000; // 冷却彻底过去后的新一波 @
   wake(wcfg, "新消息", { mention: true, mentionText: "@小助手", chatTitle: "群" });
-  eq("新一波 @ 立刻唤醒", prompts.length, 4);
-  eq("新一波 @ 判必须回", prompts[3].includes("本轮有 @ 你"), true);
+  eq("新一波 @ 立刻唤醒", prompts.length, 5);
+  eq("新一波 @ 判必须回", prompts[4].includes("本轮有 @ 你"), true);
 
   Date.now = realNow;
   setSchedule(null);
@@ -156,7 +160,7 @@ eq("@ 冷却可配置但仍有上限", wakeCooldownMs({ autoReply: { wakeCooldow
     enabled: true, wakeSessionId: "s1", wakeCooldownSec: 0,
     noMentionIntervalMin: 30, mentionKeywords: ["@小助手"],
     threadTtlMin: 10, threadGapSec: 20,
-    quiet: { enabled: true, emptyWakesBeforeBackoff: 2, backoffMin: 10, settleSec: 45 },
+    quiet: { enabled: true, emptyWakesBeforeBackoff: 2, backoffMin: 5, settleSec: 45 },
   } };
 
   // 纯反应/表情 → 本地放过
@@ -235,7 +239,8 @@ eq("@ 冷却可配置但仍有上限", wakeCooldownMs({ autoReply: { wakeCooldow
   eq("连续空转后退避生效", decideQuiet(qcfg, { mode: "thread", chat: "群B", text: "在干嘛" }).quiet, true);
   eq("退避里问句仍叫醒", decideQuiet(qcfg, { mode: "thread", chat: "群B", text: "几点了？" }).quiet, false);
 
-  // 真发了消息 → 退避清零
+  // 真发了消息 → 退避清零（先等退避到点，退避里普通消息本来就不叫）
+  t2 += 5 * 60000;
   core.setAutoReplyState(qcfg, { lastReplyAt: t2 + 1 });
   wake(qcfg, "新消息", { mention: false, chat: "群B", chatTitle: "群B", mode: "thread", text: "好的" });
   t2 += 60000;

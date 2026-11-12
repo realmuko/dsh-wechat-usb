@@ -602,7 +602,7 @@ export function apply(ctx) {
           : "讨论串: （无）",
         v.vl ? `小模型: ${v.vl.model} 图 ${v.vl.imageTokens} tok / 出 ${v.vl.outputTokens} tok @ ${v.vl.at}` : "",
         v.quiet
-          ? `空转抑制: ${v.quiet.enabled ? "开" : "关"}${v.quiet.backoff?.length ? ` · 退避中 ${v.quiet.backoff.map((b) => `${b.chat}(${b.empty}次空转)`).join("、")}` : ""}`
+          ? `空转抑制: ${v.quiet.enabled ? "开" : "关"}${v.quiet.budget?.length ? ` · ${v.quiet.budget.map((b) => `${b.chat}${b.paused ? "退避" : "冷却"}中(${b.waitSec}s)`).join("、")}` : ""}`
           : "",
         v.fallback ? `fallback: ${v.fallback}` : "",
         v.lastError ? `lastError=${v.lastError}` : "",
