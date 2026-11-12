@@ -7,7 +7,8 @@ import * as core from "../lib/core.js";
 
 const { normalize, isNoise, diffNewText, classifyFresh, chatKeyOf, buildWakePrompt,
   mentionHit, mentionScopeText, wakeCooldownMs, wake, flushMentionBacklog,
-  looksBare, decideQuiet, settleLastWake, resetQuietState, pushEntry } = __test;
+  decideQuiet, settleLastWake, resetQuietState, pushEntry, keyedLines, lineKey } = __test;
+const countsOfFor = (lines) => { const m = new Map(); for (const l of lines) m.set(l.key || l.text, (m.get(l.key || l.text) || 0) + 1); return m; };
 let failed = 0;
 
 function eq(name, actual, expected) {
@@ -54,6 +55,21 @@ eq("chatKey 空", chatKeyOf(""), "（未识别）");
   eq("噪声行丢弃", classifyFresh([{ text: "凌晨12:22" }, { text: "发送" }], { seen: new Map() }).length, 0);
   eq("自己发的不算新", classifyFresh([{ text: "好的" }], { own: "好的", seen: new Map() }).length, 0);
   eq("同一帧重复行只留一条", classifyFresh([{ text: "C" }, { text: "C" }], { seen: new Map() }).length, 1);
+}
+
+// ---- 动图识别：图片行只认「位置+发送者」，不认描述 ----
+{
+  const f1 = keyedLines([{ text: "子羽：图片：猫在挥手", y: 300 }]);
+  const f2 = keyedLines([{ text: "子羽：图片：猫站着不动", y: 300 }]);
+  eq("同一张动图换帧，身份不变", f1[0].key, f2[0].key);
+  eq("所以第二帧不算新消息", diffNewText(f2, countsOfFor(f1)).length, 0);
+
+  const other = keyedLines([{ text: "九星：图片：猫在挥手", y: 300 }]);
+  eq("换个人发，身份不同", other[0].key === f1[0].key, false);
+
+  const pushed = keyedLines([{ text: "甲：新来一条", y: 100 }, { text: "子羽：图片：猫挥手", y: 300 }]);
+  eq("图片被新消息顶下去（换了行）= 新身份", pushed[1].key === f1[0].key, false);
+  eq("文字行的身份就是它本身", lineKey({ text: "甲：你好" }, 0), "甲：你好");
 }
 
 // ---- @ 判定 ----
