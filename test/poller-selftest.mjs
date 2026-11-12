@@ -208,10 +208,11 @@ eq("@ 冷却可配置但仍有上限", wakeCooldownMs({ autoReply: { wakeCooldow
   }
   eq("整条图片 → 第一张放行", decideQuiet(qcfg, { mode: "thread", chat: "群D", text: "子羽：图片：游戏界面截图" }).quiet, false);
   eq("紧接着的图不再唤醒", decideQuiet(qcfg, { mode: "thread", chat: "群D", text: "子羽：图片：全是玩偶" }).quiet, true);
-  eq("wakeOnImage 开着时照旧唤醒", decideQuiet(
+  // text 模式下图片只有判词一条路：wakeOnImage 不再另起一条分支
+  eq("wakeOnImage 开着也不推翻判词", decideQuiet(
     { ...qcfg, autoReply: { ...qcfg.autoReply, wakeOnImage: true } },
-    { mode: "thread", chat: "群E", text: "子羽：图片：游戏界面截图" },
-  ).quiet, false);
+    { mode: "thread", chat: "群E", text: "子羽：图片：游戏界面截图", worth: "no" },
+  ).quiet, true);
   eq("@ 时图片也唤醒", decideQuiet(qcfg, { mention: true, mode: "thread", chat: "群D", text: "子羽：图片：游戏界面截图" }).quiet, false);
 
   // 本地 4b 的判词优先于时间闸
