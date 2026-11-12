@@ -33,20 +33,29 @@ PROMPT = """这是安卓微信聊天窗口的截图（手机状态栏、时间�
 1. 昵称取气泡上方那行灰色小字；没有小字，说明和上一条是同一个人，沿用上一个昵称。
 2. 右侧绿色气泡（我自己发的）的昵称一律写「我」。
 3. 文字原样转录：不要改写、不要合并相邻消息、不要总结、不要补标点。
-4. 图片/表情包/贴纸的消息，内容写「图片：<20 字内说明主体、动作、场景、有没有配字>」，末尾再加「｜值得:是」或「｜值得:否」：
-   · 值得:是 —— 有人专门画的/专门发给谁的、带明确文字信息的、点名或提问的、明显想让人接话的；
-   · 值得:否 —— 游戏界面截图、进度条、表情包、随手转的网图、系统提示、糊得看不清的图。
+4. 图片/表情包/贴纸的消息，内容写「图片：<20 字内说明主体、动作、场景、有没有配字>」。
 5. 引用别人消息的，内容写「引用：<被引用的昵称> <原文摘要>」。
 6. 语音写「语音：<时长>」；红包/转账写「红包：<金额>」。
-7. 只输出这些行，不要解释、不要编号、不要空行。"""
+7. 只输出这些行，不要解释、不要编号、不要空行。
+8. 最末尾单独再输出一行，判断「这一屏最新的内容值不值得有人接一句话」：
+判断｜值得回
+或者
+判断｜不值得回
+判断标准（只看最近的几条，且要把文字和图片放在一起看）：
+· 值得回 —— 有人提问、点名、认真在说事、明显想让人接话、有值得回应的新信息；
+· 不值得回 —— 表情包/斗图、别人之间的闲聊、短应答（对、嗯、好的）、复读、系统提示、看不清的图。
+拿不准就写「不值得回」。"""
+
 
 
 TITLE_RE = re.compile(r"^(群名|标题|TITLE)\s*[｜|:：=]\s*(.+)$", re.I)
+VERDICT_RE = re.compile(r"^(判断|结论|VERDICT)\s*[｜|:：=]\s*(.+)$", re.I)
 
 
 def split_lines(raw):
     """把模型输出拆成 (nick, content)；标题行单独返回。"""
     rows, title = [], ""
+    verdict = None
     for line in (raw or "").splitlines():
         s = line.strip()
         if not s:
@@ -59,6 +68,16 @@ def split_lines(raw):
         if m:
             title = m.group(2).strip()
             continue
+        vm = VERDICT_RE.match(s)
+        if vm:
+            body = vm.group(2)
+            if "不值得" in body:
+                verdict = "no"
+            elif "值得" in body:
+                verdict = "yes"
+            else:
+                verdict = None
+            continue
         if "｜" not in s and "|" not in s:
             rows.append((None, s))
             continue
@@ -69,7 +88,7 @@ def split_lines(raw):
         if not content:
             continue
         rows.append((nick or None, content))
-    return rows, title
+    return rows, title, verdict
 
 
 def main():
@@ -113,7 +132,7 @@ def main():
         print(json.dumps({"ok": False, "error": f"ollama 连不上: {e}", "lines": []}, ensure_ascii=False))
         return
 
-    rows, title = split_lines(resp.get("response") or "")
+    rows, title, verdict = split_lines(resp.get("response") or "")
     lines = []
     for nick, content in rows:
         text = f"{nick}：{content}" if nick else content
@@ -129,6 +148,7 @@ def main():
         "ok": True,
         "lines": lines,
         "title": title,
+        "verdict": verdict,
         "engine": "vl",
         "model": model,
         "imageTokens": resp.get("prompt_eval_count"),
