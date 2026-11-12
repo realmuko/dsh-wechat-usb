@@ -118,7 +118,7 @@ def main():
         "images": [b64],
         "stream": False,
         "keep_alive": "30m",
-        "options": {"temperature": 0, "num_predict": 700, "num_ctx": 8192},
+        "options": {"temperature": 0, "num_predict": 1100, "num_ctx": 8192},
     }
     req = urllib.request.Request(
         url.rstrip("/") + "/api/generate",
