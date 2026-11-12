@@ -472,6 +472,17 @@ export function apply(ctx) {
       render: (_a, v) => text(`opened=${v.opened} title=${v.title}\nscreenshot: ${v.screenshot}`),
     },
     async execute(args) {
+      // 已经在目标聊天里就别再「回首页 → 搜索 → 点进去」折腾一遍：
+      // 那要三十多秒，还会把用户正看的界面顶掉。轮询器每轮都在采这一帧，标题是现成的。
+      try {
+        const st = poller.pollStatus(getCfg());
+        const cur = String(st.chatTitle || "").replace(/\s+/g, "");
+        const want = String(args.title || "").replace(/\s+/g, "");
+        if (cur && want && (cur.includes(want) || want.includes(cur))) {
+          const file = core.shot(getCfg(), `open-${String(args.title).replace(/[\\/:*?"<>|\s]+/g, "_").slice(0, 40)}`);
+          return { opened: true, title: st.chatTitle, screenshot: file };
+        }
+      } catch { /* 拿不到当前标题就走原流程 */ }
       return core.openChat(getCfg(), args.title);
     },
   });
@@ -583,8 +594,16 @@ export function apply(ctx) {
       schema: { type: "object", additionalProperties: true },
       render: (_a, v) => text([
         `running=${v.running} mode=${v.mode} engine=${v.engine || "rapidocr"} interval=${v.intervalSec}s pending=${v.pending} total=${v.total}`,
+        `两级轮询: ${v.probe?.enabled ? `开（每 ${v.probe.sec}s 探一次 · 帧 ${v.probe.frames ?? "?"}）` : v.probe?.broken ? "探针不可用，已退回单轮询" : "关"}`,
         `lastAt=${v.lastAt || "—"}`,
+        `自动切回聊天: ${v.autoOpen === false ? "关（不在目标聊天就跳过）" : "开"}${v.openFails ? ` · 连续失败 ${v.openFails} 次` : ""}`,
+        v.thread
+          ? `讨论串: ${v.thread.id}（${v.thread.trigger === "mention" ? "被 @" : "自己搭话"} · ${v.thread.live ? "活着" : "已散"} · 开始 ${v.thread.ageMin} 分前 · 闲置 ${v.thread.idleMin} 分 · 上下文 ${v.thread.context} 条）`
+          : "讨论串: （无）",
         v.vl ? `小模型: ${v.vl.model} 图 ${v.vl.imageTokens} tok / 出 ${v.vl.outputTokens} tok @ ${v.vl.at}` : "",
+        v.quiet
+          ? `空转抑制: ${v.quiet.enabled ? "开" : "关"}${v.quiet.backoff?.length ? ` · 退避中 ${v.quiet.backoff.map((b) => `${b.chat}(${b.empty}次空转)`).join("、")}` : ""}`
+          : "",
         v.fallback ? `fallback: ${v.fallback}` : "",
         v.lastError ? `lastError=${v.lastError}` : "",
       ].filter(Boolean).join("\n")),

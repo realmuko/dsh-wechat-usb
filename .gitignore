@@ -23,3 +23,7 @@ node_modules/
 Thumbs.db
 .vscode/
 .idea/
+
+# 存档备份（换会话/改代码前的快照）
+*.bak-*
+*.bak-*.

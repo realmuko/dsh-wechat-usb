@@ -3,9 +3,11 @@
  *   node test/poller-selftest.mjs
  */
 import { __test, setSchedule, pollStatus } from "../lib/poller.js";
+import * as core from "../lib/core.js";
 
 const { normalize, isNoise, diffNewText, classifyFresh, chatKeyOf, buildWakePrompt,
-  mentionHit, mentionScopeText, wakeCooldownMs, wake, flushPendingMention } = __test;
+  mentionHit, mentionScopeText, wakeCooldownMs, wake, flushPendingMention,
+  looksBare, decideQuiet, settleLastWake, resetQuietState } = __test;
 let failed = 0;
 
 function eq(name, actual, expected) {
@@ -129,6 +131,120 @@ eq("@ 冷却可配置但仍有上限", wakeCooldownMs({ autoReply: { wakeCooldow
 
   Date.now = realNow;
   setSchedule(null);
+  fs.rmSync(tmp, { recursive: true, force: true });
+}
+
+// ================= 空转抑制（quiet）：别为「看到了但不需要回」付模型钱 =================
+{
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "wx-quiet-"));
+  const qcfg = { dataDir: tmp, autoReply: {
+    enabled: true, wakeSessionId: "s1", wakeCooldownSec: 0,
+    noMentionIntervalMin: 30, mentionKeywords: ["@小助手"],
+    threadTtlMin: 10, threadGapSec: 20,
+    quiet: { enabled: true, emptyWakesBeforeBackoff: 2, backoffMin: 10, settleSec: 45 },
+  } };
+
+  // 纯反应/表情 → 本地放过
+  for (const t of ["哈哈哈哈", "草", "666", "🌚🌚", "嗯嗯", "好的", "！！"]) eq(`bare ${t}`, looksBare(t), true);
+  for (const t of ["在吗", "这个怎么弄", "刚那个图再发一次", "收到了谢谢"]) eq(`not bare ${t}`, looksBare(t), false);
+
+  // @ / 识图 / 主动搭话：永远不静默
+  eq("有 @ 不静默", decideQuiet(qcfg, { mention: true, text: "哈哈哈" }).quiet, false);
+  eq("识图不静默", decideQuiet(qcfg, { vision: true, text: "哈哈哈" }).quiet, false);
+  eq("主动搭话不静默", decideQuiet(qcfg, { proactive: true, mode: "idle", text: "哈哈哈" }).quiet, false);
+  // 刚参与过、没 @、又没到间隔：插件自己就能判「不要回」→ 本地 ack 就行
+  core.setAutoReplyState(qcfg, { lastReplyAt: Date.now(), lastNoMentionAt: Date.now() });
+  eq("无@未到间隔 → 本地 ack", decideQuiet(qcfg, { mode: "idle", chat: "群Z", text: "我刚吃完饭" }).quiet, true);
+
+  // 串里：纯反应放过；问句/正常内容照旧叫模型
+  eq("串里纯反应放过", decideQuiet(qcfg, { mode: "thread", chat: "群A", text: "哈哈哈哈" }).quiet, true);
+  eq("串里问句照旧", decideQuiet(qcfg, { mode: "thread", chat: "群A", text: "这个怎么弄？" }).quiet, false);
+  eq("串里正常内容照旧", decideQuiet(qcfg, { mode: "thread", chat: "群A", text: "我刚吃完饭" }).quiet, false);
+
+  // 连带消息文本的 prompt：不让模型再花一轮去 wechat_inbox 读
+  const wp = buildWakePrompt(qcfg, "新消息", { mode: "thread", mention: false, text: "我刚吃完饭\n好吃吗", chatTitle: "群A" }, Date.now());
+  eq("prompt 带上消息文本", wp.includes("本轮新消息") && wp.includes("我刚吃完饭"), true);
+  eq("prompt 不再要求先读 inbox", wp.includes("先 wechat_inbox"), false);
+  eq("prompt 要求同一轮 ack", wp.includes("同一轮里"), true);
+
+  // 叫醒了就绝不再命令「不要回」—— 那是闸门的活，不是 prompt 的活
+  const probes = [
+    buildWakePrompt(qcfg, "新消息", { mode: "idle", mention: false, text: "在吗" }, Date.now()),
+    buildWakePrompt(qcfg, "新消息", { mode: "thread", mention: false, text: "今天好热", thread: { id: "t1", trigger: "mention", startedAt: Date.now() - 60000, context: [] } }, Date.now()),
+    buildWakePrompt(qcfg, "新消息", { mode: "mention", mention: true, mentionText: "@小助手", text: "在吗" }, Date.now()),
+    buildWakePrompt(qcfg, "新画面", { vision: true, chatTitle: "群A" }, Date.now()),
+  ];
+  for (const [i, p] of probes.entries()) eq(`prompt#${i + 1} 无「不要回，只 ack」`, p.includes("不要回，只 ack"), false);
+  eq("串模式仍是可回可不回", probes[1].includes("可以接话"), true);
+
+  // 图片描述成文字：整条只有图片 → 不唤醒（wakeOnImage 关着时）
+  for (const t of [
+    "子羽：图片：游戏界面截图，有进度条和小窗口",
+    "子羽：图片：显示“请客没钱”字样\n子羽：图片：游戏界面截图",
+    "图片",
+    "[图片]",
+  ]) eq(`imageOnly ${t.slice(0, 12)}`, __test.isImageOnly(t), true);
+  for (const t of ["子羽：图片：截图\n子羽：哈哈哈", "子羽：这图什么意思", "子羽：[图片] 你看这个"]) {
+    eq(`not imageOnly ${t.slice(0, 12)}`, __test.isImageOnly(t), false);
+  }
+  eq("整条图片 → 第一张放行", decideQuiet(qcfg, { mode: "thread", chat: "群D", text: "子羽：图片：游戏界面截图" }).quiet, false);
+  eq("紧接着的图不再唤醒", decideQuiet(qcfg, { mode: "thread", chat: "群D", text: "子羽：图片：全是玩偶" }).quiet, true);
+  eq("wakeOnImage 开着时照旧唤醒", decideQuiet(
+    { ...qcfg, autoReply: { ...qcfg.autoReply, wakeOnImage: true } },
+    { mode: "thread", chat: "群E", text: "子羽：图片：游戏界面截图" },
+  ).quiet, false);
+  eq("@ 时图片也唤醒", decideQuiet(qcfg, { mention: true, mode: "thread", chat: "群D", text: "子羽：图片：游戏界面截图" }).quiet, false);
+
+  // 本地 4b 的判词优先于时间闸
+  eq("判词 否 → 不唤醒", decideQuiet(qcfg, { mode: "thread", chat: "群F", text: "子羽：图片：游戏界面截图", worth: "no" }).quiet, true);
+  decideQuiet(qcfg, { mode: "thread", chat: "群F", text: "子羽：图片：谁画的鱼", worth: "yes" });
+  eq("判词 是 → 照唤醒", decideQuiet(qcfg, { mode: "thread", chat: "群F", text: "子羽：图片：谁画的鱼", worth: "yes" }).quiet, false);
+  eq("WORTH_RE 认全角/空格", "子羽：图片：xxx ｜ 值得: 否".match(__test.WORTH_RE)?.[1], "否");
+  eq("WORTH_RE 也认冒号分隔", "九星噩夜：图片：小鱼图案：值得:否".match(__test.WORTH_RE)?.[1], "否");
+  eq("WORTH_STRIP_RE 剥干净", "子羽：图片：xxx｜值得:是".replace(__test.WORTH_STRIP_RE, ""), "子羽：图片：xxx");
+  eq("WORTH_STRIP_RE 也剥冒号版", "九星噩夜：图片：小鱼图案：值得:否".replace(__test.WORTH_STRIP_RE, ""), "九星噩夜：图片：小鱼图案");
+
+  // 空转退避：连两次唤醒都没换来发送 → 静默；静默里只有问句能叫醒
+  const realNow2 = Date.now;
+  let t2 = realNow2();
+  Date.now = () => t2;
+  setSchedule({ create: () => Promise.resolve() });
+  resetQuietState();
+
+  wake(qcfg, "新消息", { mention: false, chat: "群B", chatTitle: "群B", mode: "thread", text: "我刚吃完饭" });
+  t2 += 60000;
+  settleLastWake(qcfg, t2);
+  wake(qcfg, "新消息", { mention: false, chat: "群B", chatTitle: "群B", mode: "thread", text: "我也刚吃完" });
+  t2 += 60000;
+  settleLastWake(qcfg, t2);
+  eq("连续空转后退避生效", decideQuiet(qcfg, { mode: "thread", chat: "群B", text: "在干嘛" }).quiet, true);
+  eq("退避里问句仍叫醒", decideQuiet(qcfg, { mode: "thread", chat: "群B", text: "几点了？" }).quiet, false);
+
+  // 真发了消息 → 退避清零
+  core.setAutoReplyState(qcfg, { lastReplyAt: t2 + 1 });
+  wake(qcfg, "新消息", { mention: false, chat: "群B", chatTitle: "群B", mode: "thread", text: "好的" });
+  t2 += 60000;
+  settleLastWake(qcfg, t2);
+  eq("发过消息后退避解除", decideQuiet(qcfg, { mode: "thread", chat: "群B", text: "在干嘛" }).quiet, false);
+
+  // 被 @ 的唤醒没回，不算空转 —— 不能因为它把整个群静默掉
+  {
+    core.setAutoReplyState(qcfg, { lastReplyAt: 0 });
+    const before = decideQuiet(qcfg, { mode: "thread", chat: "群G", text: "随便说点啥" }).quiet;
+    for (let i = 0; i < 4; i += 1) {
+      wake(qcfg, "新消息", { mention: true, mentionText: "@小助手", chat: "群G", chatTitle: "群G", mode: "mention", text: "在吗" });
+      t2 += 60000;
+      settleLastWake(qcfg, t2);
+    }
+    eq("@ 空转不退避", decideQuiet(qcfg, { mode: "thread", chat: "群G", text: "随便说点啥" }).quiet, before);
+  }
+
+  Date.now = realNow2;
+  setSchedule(null);
+  resetQuietState();
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 
