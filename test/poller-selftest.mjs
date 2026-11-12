@@ -158,6 +158,18 @@ eq("@ 冷却可配置但仍有上限", wakeCooldownMs({ autoReply: { wakeCooldow
   eq("新一波 @ 立刻唤醒", prompts.length, 5);
   eq("新一波 @ 判必须回", prompts[4].includes("本轮有 @ 你"), true);
 
+  // 纯图片/动图：一段只叫一次（图片本身照样可以被判「值得回」）
+  t += 500000;
+  wake(wcfg, "新消息", { mention: false, chatTitle: "群P", text: "子羽：图片：猫在动" });
+  eq("图片唤醒一次", prompts.length, 6);
+  t += 30000;
+  wake(wcfg, "新消息", { mention: false, chatTitle: "群P", text: "子羽：图片：猫还在动" });
+  eq("30 秒内同一段动图不再叫", prompts.length, 6);
+  t += 120000;
+  wake(wcfg, "新消息", { mention: false, chatTitle: "群P", text: "子羽：图片：换了张新的" });
+  eq("过了 imageCooldown 可以再叫", prompts.length, 7);
+
+
   Date.now = realNow;
   setSchedule(null);
   fs.rmSync(tmp, { recursive: true, force: true });
