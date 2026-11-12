@@ -219,6 +219,15 @@ eq("@ 冷却可配置但仍有上限", wakeCooldownMs({ autoReply: { wakeCooldow
   eq("判词 否 → 不唤醒", decideQuiet(qcfg, { mode: "thread", chat: "群F", text: "子羽：图片：游戏界面截图", worth: "no" }).quiet, true);
   decideQuiet(qcfg, { mode: "thread", chat: "群F", text: "子羽：图片：谁画的鱼", worth: "yes" });
   eq("判词 是 → 照唤醒", decideQuiet(qcfg, { mode: "thread", chat: "群F", text: "子羽：图片：谁画的鱼", worth: "yes" }).quiet, false);
+
+  // 刷图抑制：同一个人 10 分钟内连发多张图 → 后面的图不再叫醒
+  {
+    const who = "刷图机器人";
+    eq("前 3 张不算刷屏", __test.noteImages(qcfg, [{ text: `${who}：图片：A` }, { text: `${who}：图片：B` }, { text: `${who}：图片：C` }]), false);
+    eq("第 4 张开始判刷屏", __test.noteImages(qcfg, [{ text: `${who}：图片：D` }]), true);
+    eq("刷屏时图片不唤醒", decideQuiet(qcfg, { mode: "thread", chat: "群H", text: `${who}：图片：E`, worth: "yes", flood: true }).quiet, true);
+    eq("别的人发图照常", __test.noteImages(qcfg, [{ text: "子羽：图片：F" }]), false);
+  }
   eq("WORTH_RE 认全角/空格", "子羽：图片：xxx ｜ 值得: 否".match(__test.WORTH_RE)?.[1], "否");
   eq("WORTH_RE 也认冒号分隔", "九星噩夜：图片：小鱼图案：值得:否".match(__test.WORTH_RE)?.[1], "否");
   eq("WORTH_STRIP_RE 剥干净", "子羽：图片：xxx｜值得:是".replace(__test.WORTH_STRIP_RE, ""), "子羽：图片：xxx");

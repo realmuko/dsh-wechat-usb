@@ -383,13 +383,13 @@ export function apply(ctx) {
     name: "wechat_autoreply_state",
     description:
       "读取/更新自动回复的时间戳状态：lastMentionAt（上次被@）、lastReplyAt（上次自动回复）、lastNoMentionAt（上次无@主动参与）。" +
-      "传毫秒时间戳则更新，不传则只读。用于判断“多久没被@、要不要主动参与”。",
+      "值可以传毫秒时间戳，**也可以直接传字符串 \"now\"**（等于当前时间，省得你再查一次时间）。不传则只读。",
     parameters: {
       type: "object",
       properties: {
-        lastMentionAt: { type: "number", description: "上次收到 @ 的毫秒时间戳" },
-        lastReplyAt: { type: "number", description: "上次自动回复的毫秒时间戳" },
-        lastNoMentionAt: { type: "number", description: "上次无@主动参与的毫秒时间戳" },
+        lastMentionAt: { type: ["number", "string"], description: "上次收到 @ 的时间戳，或 \"now\"" },
+        lastReplyAt: { type: ["number", "string"], description: "上次自动回复的时间戳，或 \"now\"" },
+        lastNoMentionAt: { type: ["number", "string"], description: "上次无@主动参与的时间戳，或 \"now\"" },
       },
     },
     output: {
@@ -403,9 +403,16 @@ export function apply(ctx) {
     isConcurrencySafe: () => true,
     async execute(args) {
       const cfg = getCfg();
-      return Object.keys(args || {}).length
-        ? core.setAutoReplyState(cfg, args)
-        : core.autoReplyState(cfg);
+      if (!Object.keys(args || {}).length) return core.autoReplyState(cfg);
+      // 允许写 "now"：模型每轮为了拿时间戳要额外跑一次 date，纯浪费
+      const patch = {};
+      for (const k of ["lastMentionAt", "lastReplyAt", "lastNoMentionAt"]) {
+        const v = args[k];
+        if (v === undefined) continue;
+        if (v === "now" || v === "NOW") patch[k] = Date.now();
+        else patch[k] = Number(v);
+      }
+      return core.setAutoReplyState(cfg, patch);
     },
   });
 
