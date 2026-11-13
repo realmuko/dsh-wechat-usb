@@ -74,6 +74,20 @@ eq("chatKey 空", chatKeyOf(""), "（未识别）");
     const k3 = classifyFresh([{ text: "在呢，叫我一声" }], { ownList: ["在呢，叫我就应一声"], seen: new Map() });
     eq("OCR 读歪一两个字也能认出来", k3.length, 0);
 
+    // 图片身份过期：同一位置隔 45 秒后再来一张，必须当新图重新识别
+    {
+      const seen = new Map();
+      seen.set("#img@4@球球别抓我", Date.now() - 60000);
+      const kept = classifyFresh([{ text: "球球别抓我：图片：一张全新的图", key: "#img@4@球球别抓我" }], { seen });
+      eq("图片身份过期后要重新识别", kept.length, 1);
+    }
+    {
+      const seen = new Map();
+      seen.set("#img@4@球球别抓我", Date.now() - 5000);
+      const kept = classifyFresh([{ text: "球球别抓我：图片：动图下一帧", key: "#img@4@球球别抓我" }], { seen });
+      eq("动图几帧之内仍然合并", kept.length, 0);
+    }
+
     // 别人的正常发言不能被误杀
     const k4 = classifyFresh([{ text: "德师傅：在呢，叫我一声呗" }], { ownList: ["在呢，叫我就应一声"], seen: new Map() });
     eq("别人说的类似话不误杀", k4.length, 1);
