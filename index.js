@@ -608,6 +608,7 @@ export function apply(ctx) {
           ? `讨论串: ${v.thread.id}（${v.thread.trigger === "mention" ? "被 @" : "自己搭话"} · ${v.thread.live ? "活着" : "已散"} · 开始 ${v.thread.ageMin} 分前 · 闲置 ${v.thread.idleMin} 分 · 上下文 ${v.thread.context} 条）`
           : "讨论串: （无）",
         v.vl ? `小模型: ${v.vl.model} 图 ${v.vl.imageTokens} tok / 出 ${v.vl.outputTokens} tok @ ${v.vl.at}` : "",
+        v.judge ? `判官(最近一次): ${v.judge.verdict === "yes" ? "值得回" : "不值得回"} · ${v.judge.reason || "-"} @ ${v.judge.at}` : "",
         v.quiet
           ? `空转抑制: ${v.quiet.enabled ? "开" : "关"}${v.quiet.budget?.length ? ` · ${v.quiet.budget.map((b) => `${b.chat}${b.paused ? "退避" : "冷却"}中(${b.waitSec}s)`).join("、")}` : ""}`
           : "",
