@@ -54,6 +54,18 @@ eq("chatKey 空", chatKeyOf(""), "（未识别）");
   eq("同 30 分钟内再出现不算新", classifyFresh([{ text: "在吗" }], { seen }).length, 0);
   eq("噪声行丢弃", classifyFresh([{ text: "凌晨12:22" }, { text: "发送" }], { seen: new Map() }).length, 0);
   eq("自己发的不算新", classifyFresh([{ text: "好的" }], { own: "好的", seen: new Map() }).length, 0);
+  // 连着发几条：前面几条也要认出来（这是"自己回自己"的根因）
+  {
+    const ownList = ["然后你嘎嘎乱杀", "英雄单位还被乱杀"];
+    const fresh = [
+      { text: "我：然后你嘎嘎乱杀" },
+      { text: "我：英雄单位还被乱杀，听着跟我差不多" },
+      { text: "德师傅：这鱼真会说话" },
+    ];
+    const kept = classifyFresh(fresh, { ownList, seen: new Map() });
+    eq("连着发的几条自己消息都过滤掉", kept.length, 1);
+    eq("别人的话没被误伤", kept[0].text, "德师傅：这鱼真会说话");
+  }
   eq("同一帧重复行只留一条", classifyFresh([{ text: "C" }, { text: "C" }], { seen: new Map() }).length, 1);
 }
 
