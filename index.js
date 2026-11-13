@@ -276,12 +276,14 @@ export function apply(ctx) {
             if (!s) return json(res, 503, { ok: false, error: "schedule service unavailable" });
             try {
               const body = await readJsonBody(req);
-              const result = await s.create({
+              const sid = body.actorSessionId || body.target?.sessionId;
+              if (!sid) return json(res, 400, { ok: false, error: "actorSessionId is required" });
+              const result = await poller.scheduleCreate(core.loadConfig(), {
                 title: body.title || "测试唤醒",
                 prompt: body.prompt || "[测试唤醒] 无需处理，直接回复“收到”并结束。",
-                timing: body.timing,
-                target: body.target,
-              }, body.actorSessionId);
+                at: body.timing?.at || new Date(Date.now() + 2000).toISOString(),
+                sid,
+              });
               return json(res, 200, { ok: true, result });
             } catch (e) {
               return json(res, 500, { ok: false, error: String(e?.message || e), stack: String(e?.stack || "").split("\n").slice(0, 4) });
