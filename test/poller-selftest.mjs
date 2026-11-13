@@ -180,23 +180,21 @@ eq("@ 冷却可配置但仍有上限", wakeCooldownMs({ autoReply: { wakeCooldow
   wake(wcfg, "新消息", { mention: true, mentionText: "@小助手", chatTitle: "群" });
   eq("@ 的 15 秒合并窗口生效", prompts.length, 2);
 
-  t += 50000; // 过了 @ 的合并窗口，且上一轮已结算
-  flushMentionBacklog(wcfg);
-  eq("@ 从 inbox 补发一次", prompts.length, 3);
-  eq("补发的 prompt 判必须回", prompts[2].includes("必须回一句"), true);
-
+  // 旧的那条 @（在上一次唤醒之前就在屏幕上了）不该被补发——模型已经看过那个画面
   t += 50000;
   flushMentionBacklog(wcfg);
-  eq("同一条 @ 补到上限（第 2 次）", prompts.length, 4);
+  eq("唤醒之前就存在的 @ 不补发", prompts.length, 2);
 
+  // 补发最多一次：再 flush 也不该多叫
+  const n0 = prompts.length;
   t += 50000;
   flushMentionBacklog(wcfg);
-  eq("超过上限不再补", prompts.length, 4);
+  eq("同一条 @ 只补一次", prompts.length, n0);
 
   t += 200000; // 冷却彻底过去后的新一波 @
   wake(wcfg, "新消息", { mention: true, mentionText: "@小助手", chatTitle: "群" });
-  eq("新一波 @ 立刻唤醒", prompts.length, 5);
-  eq("新一波 @ 判必须回", prompts[4].includes("本轮有 @ 你"), true);
+  eq("新一波 @ 立刻唤醒", prompts.length, n0 + 1);
+  eq("新一波 @ 判必须回", prompts[prompts.length - 1].includes("本轮有 @ 你"), true);
 
 
 
