@@ -1,6 +1,6 @@
 {
   "name": "dsh-wechat-usb",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "main": "index.js",
@@ -40,7 +40,7 @@
     "wechat-usb.config.example.json"
   ],
   "scripts": {
-    "test": "node --check index.js && node --check client.js && node --check lib/core.js && node --check lib/poller.js && node test/poller-selftest.mjs",
+    "test": "node test/poller-selftest.mjs",
     "selftest": "node test/poller-selftest.mjs",
     "check": "node --check index.js && node --check client.js && node --check lib/core.js && node --check lib/poller.js && node --check lib/api.js && node --check lib/sessions.js",
     "cli": "node lib/cli.js"
