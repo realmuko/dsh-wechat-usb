@@ -121,7 +121,10 @@ def main():
         "images": [b64],
         "stream": False,
         "keep_alive": "30m",
-        "options": {"temperature": 0, "num_predict": 1100, "num_ctx": 8192},
+        # num_ctx 必须和 judge_worth.py 一致，否则 Ollama 会当成两份配置、每帧来回重载。
+        # 4096 够用（图 ~1500 tok + prompt + 输出 1100），且能整份塞进 6GB 显存（100% GPU）；
+        # 8192 会把模型顶到 4.8GB，24% 溢出到 CPU，单帧从 2.1 秒变 3.4 秒。
+        "options": {"temperature": 0, "num_predict": 1100, "num_ctx": 4096},
     }
     req = urllib.request.Request(
         url.rstrip("/") + "/api/generate",
