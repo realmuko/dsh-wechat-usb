@@ -65,6 +65,18 @@ eq("chatKey 空", chatKeyOf(""), "（未识别）");
     const kept = classifyFresh(fresh, { ownList, seen: new Map() });
     eq("连着发的几条自己消息都过滤掉", kept.length, 1);
     eq("别人的话没被误伤", kept[0].text, "德师傅：这鱼真会说话");
+
+    // 真实事故：她发「在呢，叫我就应一声」，OCR 读成「我：在呢，叫我一声」
+    const k2 = classifyFresh([{ text: "我：在呢，叫我一声" }], { ownList: ["在呢，叫我就应一声"], seen: new Map() });
+    eq("绿气泡标「我：」直接过滤", k2.length, 0);
+
+    // 就算 VL 没标「我：」，OCR 读歪一两个字也要认出来
+    const k3 = classifyFresh([{ text: "在呢，叫我一声" }], { ownList: ["在呢，叫我就应一声"], seen: new Map() });
+    eq("OCR 读歪一两个字也能认出来", k3.length, 0);
+
+    // 别人的正常发言不能被误杀
+    const k4 = classifyFresh([{ text: "德师傅：在呢，叫我一声呗" }], { ownList: ["在呢，叫我就应一声"], seen: new Map() });
+    eq("别人说的类似话不误杀", k4.length, 1);
   }
   eq("同一帧重复行只留一条", classifyFresh([{ text: "C" }, { text: "C" }], { seen: new Map() }).length, 1);
 }
