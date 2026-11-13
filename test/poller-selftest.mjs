@@ -7,7 +7,7 @@ import * as core from "../lib/core.js";
 
 const { normalize, isNoise, diffNewText, classifyFresh, chatKeyOf, buildWakePrompt,
   mentionHit, mentionScopeText, wakeCooldownMs, wake, flushMentionBacklog,
-  decideQuiet, settleLastWake, resetQuietState, pushEntry, keyedLines, lineKey } = __test;
+  decideQuiet, settleLastWake, resetQuietState, pushEntry, keyedLines, lineKey, sameAnimationZone } = __test;
 const countsOfFor = (lines) => { const m = new Map(); for (const l of lines) m.set(l.key || l.text, (m.get(l.key || l.text) || 0) + 1); return m; };
 let failed = 0;
 
@@ -74,20 +74,6 @@ eq("chatKey 空", chatKeyOf(""), "（未识别）");
     const k3 = classifyFresh([{ text: "在呢，叫我一声" }], { ownList: ["在呢，叫我就应一声"], seen: new Map() });
     eq("OCR 读歪一两个字也能认出来", k3.length, 0);
 
-    // 图片身份过期：同一位置隔 45 秒后再来一张，必须当新图重新识别
-    {
-      const seen = new Map();
-      seen.set("#img@4@球球别抓我", Date.now() - 60000);
-      const kept = classifyFresh([{ text: "球球别抓我：图片：一张全新的图", key: "#img@4@球球别抓我" }], { seen });
-      eq("图片身份过期后要重新识别", kept.length, 1);
-    }
-    {
-      const seen = new Map();
-      seen.set("#img@4@球球别抓我", Date.now() - 5000);
-      const kept = classifyFresh([{ text: "球球别抓我：图片：动图下一帧", key: "#img@4@球球别抓我" }], { seen });
-      eq("动图几帧之内仍然合并", kept.length, 0);
-    }
-
     // 别人的正常发言不能被误杀
     const k4 = classifyFresh([{ text: "德师傅：在呢，叫我一声呗" }], { ownList: ["在呢，叫我就应一声"], seen: new Map() });
     eq("别人说的类似话不误杀", k4.length, 1);
@@ -95,19 +81,19 @@ eq("chatKey 空", chatKeyOf(""), "（未识别）");
   eq("同一帧重复行只留一条", classifyFresh([{ text: "C" }, { text: "C" }], { seen: new Map() }).length, 1);
 }
 
-// ---- 动图识别：图片行只认「位置+发送者」，不认描述 ----
+// ---- 动图识别：身份=文字，是否"同一张动图"交给像素差异 ----
 {
-  const f1 = keyedLines([{ text: "子羽：图片：猫在挥手", y: 300 }]);
-  const f2 = keyedLines([{ text: "子羽：图片：猫站着不动", y: 300 }]);
-  eq("同一张动图换帧，身份不变", f1[0].key, f2[0].key);
-  eq("所以第二帧不算新消息", diffNewText(f2, countsOfFor(f1)).length, 0);
+  // 图片行的身份就是它的文字（不再用位置：位置会被复用，会把新图当旧图吞掉）
+  eq("图片身份就是文字", lineKey({ text: "子羽：图片：猫在挥手" }), "子羽：图片：猫在挥手");
+  eq("不同描述的图身份不同", lineKey({ text: "子羽：图片：猫站着" }) === lineKey({ text: "子羽：图片：猫在挥手" }), false);
 
-  const other = keyedLines([{ text: "九星：图片：猫在挥手", y: 300 }]);
-  eq("换个人发，身份不同", other[0].key === f1[0].key, false);
-
-  const pushed = keyedLines([{ text: "甲：新来一条", y: 100 }, { text: "子羽：图片：猫挥手", y: 300 }]);
-  eq("图片被新消息顶下去（换了行）= 新身份", pushed[1].key === f1[0].key, false);
-  eq("文字行的身份就是它本身", lineKey({ text: "甲：你好" }, 0), "甲：你好");
+  // 像素带判定：窄带 + 中心没挪窝 = 同一处还在动（动图）
+  const rows = 410;
+  eq("窄带中心没动 → 是动图", sameAnimationZone({ band: [185, 231] }, { band: [183, 232], rows }, rows), true);
+  eq("窄带轻微游移 → 还是动图", sameAnimationZone({ band: [145, 223] }, { band: [185, 231], rows }, rows), true);
+  eq("整屏变化（滚动/新消息）→ 不是动图", sameAnimationZone({ band: [7, 410] }, { band: [8, 403], rows }, rows), false);
+  eq("中心挪得远 → 不是动图", sameAnimationZone({ band: [10, 60] }, { band: [300, 350], rows }, rows), false);
+  eq("上一帧没有变化带 → 不是动图", sameAnimationZone({ band: null }, { band: [10, 60], rows }, rows), false);
 }
 
 // ---- @ 判定 ----
@@ -212,16 +198,6 @@ eq("@ 冷却可配置但仍有上限", wakeCooldownMs({ autoReply: { wakeCooldow
   eq("新一波 @ 立刻唤醒", prompts.length, 5);
   eq("新一波 @ 判必须回", prompts[4].includes("本轮有 @ 你"), true);
 
-  // 纯图片/动图：一段只叫一次（图片本身照样可以被判「值得回」）
-  t += 500000;
-  wake(wcfg, "新消息", { mention: false, chatTitle: "群P", text: "子羽：图片：猫在动" });
-  eq("图片唤醒一次", prompts.length, 6);
-  t += 30000;
-  wake(wcfg, "新消息", { mention: false, chatTitle: "群P", text: "子羽：图片：猫还在动" });
-  eq("30 秒内同一段动图不再叫", prompts.length, 6);
-  t += 120000;
-  wake(wcfg, "新消息", { mention: false, chatTitle: "群P", text: "子羽：图片：换了张新的" });
-  eq("过了 imageCooldown 可以再叫", prompts.length, 7);
 
 
   Date.now = realNow;
