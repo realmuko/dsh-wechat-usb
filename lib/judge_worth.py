@@ -67,7 +67,8 @@ def main():
         "prompt": build(payload),
         "stream": False,
         "keep_alive": "30m",
-        "options": {"temperature": 0, "num_predict": 8, "num_ctx": 2048},
+        # num_ctx 必须和 vl_ocr.py 一致，否则 Ollama 会当成两份配置、每帧来回重载（实测 +6 秒）
+        "options": {"temperature": 0, "num_predict": 8, "num_ctx": 8192},
     }
     req = urllib.request.Request(
         url.rstrip("/") + "/api/generate",
