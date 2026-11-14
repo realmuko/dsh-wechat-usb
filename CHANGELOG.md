@@ -5,10 +5,32 @@
 目标：从「死盯一个会话」升级成「模拟人看微信」——平时停在聊天列表，按未读发现新会话；
 进群确认后开讨论串；串活着就不离开该会话（单窗口硬约束）。
 
+### 已实现（P0~P3）
+
+- **P0 界面噪声**：`isUiNoise()` 把 `微信：刚刚`、`有人@我`、`[16条]`、`12:22` 这类浮层/提示行
+  在差分前丢掉；多会话模式下 OCR 裁剪从 `y=180` 起，顶部通知横幅根本不进识别区。
+- **P1 线程优先**：`state.mode`（`idle` / `thread`）；线程态只读当前会话，列表轮询自动跳过。
+- **P2 列表扫描 + 进群**：`scanChatList()` 用 Windows OCR（快、带坐标）解析
+  「会话名 / 未读数 / 预览 / 群还是私聊」；`chooseCandidate()` 按 **@提示 > 私聊 > 群** 挑一个，
+  未读没涨不重复挑；进会话后 `justEntered` 让首屏全部算新，交给原来的差分/判官/唤醒链路。
+- **P3「有人@我」跳转**：未读 ≥ 4 且屏里没 @ 时，`findMentionTag()` 定位顶部提示条并点击，
+  `waitScrollSettle()` 每 `scrollSampleMs` 截帧、连续 `scrollStableFrames` 帧一致才算停（上限 `scrollTimeoutMs`），
+  期间探针静默。
+- **单窗口约束**：没叫醒她就退回列表，并给该会话 `perChatCooldownSec` 冷却；只有真的唤醒且串活着才钉住。
+
+### 新增配置
+
+`multi: { enabled, listScanSec, perChatCooldownSec, enterSettleMs, scrollSampleMs, scrollStableFrames, scrollTimeoutMs, maxScrollScreens }`。
+`multi.enabled: false` 退回 v1 单会话行为。
+
+### 已知未验证
+
+- 列表行被 @ 后是否显示 `[有人@我]` 并保留（当前按「未读数上升」触发，不依赖它）；
+- 「有人@我」提示条的真实文案/坐标，以及滚动动画时长分布；
+- 4B 对聊天区的识别在“刚进群、整屏都算新”时是否会话变长。
+
 - 设计文档：`docs/wechat-multichat-design.md`
 - 架构图：`docs/multichat-architecture.png`
-- 落地顺序：**P0** 横幅/引用噪声 → **P1** 串优先 → **P2** 列表扫描 + 进群 →
-  **P3**「有人@我」跳转 + 等滚动停 → **P4** 多群选择策略
 - 回滚基线：`v0.3.1`（单会话版，随时可 checkout）
 
 ## 0.3.1 — 热修（2026-11-14）

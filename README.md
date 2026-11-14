@@ -69,6 +69,47 @@ cp wechat-usb.config.example.json wechat-usb.config.json   # Windows: copy
 
 随包带一个技能 `wechat-usb`（`skills/wechat-usb/SKILL.md`），说明标准流程、坐标表与踩坑。
 
+## 多会话调度（v2）
+
+> 设计文档：[`docs/wechat-multichat-design.md`](docs/wechat-multichat-design.md) · 架构图：[`docs/multichat-architecture.png`](docs/multichat-architecture.png)
+
+v2 之前只盯 `autoReply.whitelistChats[0]` 一个群。v2 改成「模拟人看微信」：
+
+```
+IDLE   停在聊天列表，每 listScanSec 秒截一张列表（Windows OCR，带坐标）
+       └ 某行未读数比上次大 → 进这个会话
+ENTER  先读当前屏：@ 在屏里就直接判；不在且未读多 → 点「有人@我」并等滚动停
+THREAD 一旦叫醒她（开了讨论串）就钉在这个会话，不再扫列表
+       串过期 / 没叫醒 → 回列表，并给这个会话 perChatCooldownSec 冷却
+```
+
+几条硬规则：
+
+- **单窗口**：同一时刻只处理一个会话，进另一个会话前一定先离开当前；
+- **线程优先**：有活着的讨论串时，列表轮询自动跳过（`listTimer` 里判断 `mode === "thread"`）；
+- **@ 判定放在聊天区**：多会话模式下 OCR 从 `y=180` 起，顶部通知横幅根本进不来；标题直接用“我们点进来的那个会话”，不再让模型猜；
+- **界面噪声过滤**：`微信：刚刚`、`有人@我`、`[16条]`、`12:22` 这类行在差分前就丢掉；
+- **等滚动停**：点「有人@我」后每 `scrollSampleMs` 截一帧，连续 `scrollStableFrames` 帧哈希一致才算停（上限 `scrollTimeoutMs`），期间探针静默。
+
+配置（全部可选，不写就用默认值）：
+
+```json
+"multi": {
+  "enabled": true,
+  "listScanSec": 15,
+  "perChatCooldownSec": 90,
+  "enterSettleMs": 500,
+  "scrollSampleMs": 400,
+  "scrollStableFrames": 2,
+  "scrollTimeoutMs": 5000,
+  "maxScrollScreens": 3
+}
+```
+
+`multi.enabled: false` 就退回 v1 的单会话行为（死盯 `whitelistChats[0]`）。
+
+运行时状态：`wechat_poll_status` 里的 `schedule`（`idle` / `thread`）、`current`（当前会话）、`list`（上次列表扫描结果）。
+
 ## 安全策略（`wechat-usb.config.json` → `policy`）
 
 - 发送前强制拦截：IP、盘符路径、`\\host\`、`adb`、`dsh`、`platform-tools`、`DeepSeek Harness`、`app.asar`、设备序列号、主机用户名等；
@@ -139,10 +180,10 @@ plugin_manager set_bundle target="dsh-wechat-usb" enabled=true
 ## 版本路线
 
 - **v1.x（当前 `0.3.1`）**：单会话。死盯 `autoReply.whitelistChats` 里的那一个群，逐帧 OCR 判新消息。
-- **v2.0（开发中）**：多会话调度。平时停在聊天列表、按**未读数变化**发现新会话，进群确认后开讨论串；
+- **v2.0（开发中，已在 `2.0.0-dev`）**：多会话调度。平时停在聊天列表、按**未读数变化**发现新会话，进群确认后开讨论串；
   串活着就留在该会话不切走（**单窗口是硬约束**）。@ 不在可见区时才点「有人@我」并等滚动停。
 
-  设计：[`docs/wechat-multichat-design.md`](docs/wechat-multichat-design.md) ·
+  实现见下面「多会话调度（v2）」；设计：[`docs/wechat-multichat-design.md`](docs/wechat-multichat-design.md) ·
   架构图：[`docs/multichat-architecture.png`](docs/multichat-architecture.png)
 
   > 单会话基线已打标签 `v0.3.1`，随时可以 `git checkout v0.3.1` 回滚。

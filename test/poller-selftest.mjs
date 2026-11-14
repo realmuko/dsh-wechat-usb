@@ -7,7 +7,8 @@ import * as core from "../lib/core.js";
 
 const { normalize, isNoise, diffNewText, classifyFresh, chatKeyOf, buildWakePrompt,
   mentionHit, mentionScopeText, wakeCooldownMs, wake, flushMentionBacklog,
-  decideQuiet, settleLastWake, resetQuietState, pushEntry, keyedLines, lineKey, sameAnimationZone } = __test;
+  decideQuiet, settleLastWake, resetQuietState, pushEntry, keyedLines, lineKey, sameAnimationZone,
+  isUiNoise, multiOf, parseListRows, chooseCandidate } = __test;
 const countsOfFor = (lines) => { const m = new Map(); for (const l of lines) m.set(l.key || l.text, (m.get(l.key || l.text) || 0) + 1); return m; };
 let failed = 0;
 
@@ -254,6 +255,50 @@ eq("@ 冷却可配置但仍有上限", wakeCooldownMs({ autoReply: { wakeCooldow
   resetQuietState();
   fs.rmSync(tmp, { recursive: true, force: true });
 }
+
+/* ---------------- v2 多会话 ---------------- */
+
+// 界面噪声：浮层横幅 / 引用提示 / 时间戳，不算聊天内容
+for (const t of ["微信：刚刚", "微信:昨天", "有人@我", "以下为新消息", "[16条]", "12:22"]) {
+  eq(`ui-noise: ${t}`, isUiNoise(t), true);
+}
+for (const t of ["毁灭菇翘嘴软饭群", "球球别抓我：晚上好", "在吗", "今天 8:55 开会"]) {
+  eq(`ui-keep: ${t}`, isUiNoise(t), false);
+}
+
+// 列表行解析（Windows OCR 的行，带坐标）
+const listRows = parseListRows([
+  { text: "毁灭菇翘嘴软饭群", x: 200, y: 340, w: 400 },
+  { text: "球球别抓我：哦？", x: 200, y: 390, w: 400 },
+  { text: "15", x: 980, y: 340, w: 40 },
+  { text: "zhyk", x: 200, y: 500, w: 100 },
+  { text: "测试信息，你说要发一条纯文字消息给你看的", x: 200, y: 550, w: 500 },
+  { text: "1", x: 980, y: 500, w: 20 },
+]);
+eq("列表行数", listRows.length, 2);
+eq("群行", { name: listRows[0]?.name, unread: listRows[0]?.unread, isGroup: listRows[0]?.isGroup },
+  { name: "毁灭菇翘嘴软饭群", unread: 15, isGroup: true });
+eq("私聊行", { name: listRows[1]?.name, unread: listRows[1]?.unread, isGroup: listRows[1]?.isGroup },
+  { name: "zhyk", unread: 1, isGroup: false });
+
+// 挑会话：@提示 > 私聊 > 群聊；未读没涨就不重复挑
+const cfgM = { autoReply: { enabled: true } };
+const nowM = Date.now();
+const rowsM = [
+  { name: "甲群", unread: 3, isGroup: true, preview: "a: b", y: 300 },
+  { name: "乙私聊", unread: 2, isGroup: false, preview: "在吗", y: 450 },
+  { name: "丙群", unread: 5, isGroup: true, preview: "有人@我", y: 600 },
+];
+const c1 = chooseCandidate(cfgM, rowsM, nowM);
+eq("优先挑被 @ 的群", c1 && c1.name, "丙群");
+const c2 = chooseCandidate(cfgM, rowsM, nowM + 1000);
+eq("未读没涨就不再挑", c2, null);
+
+// 多会话配置默认值
+const mDef = multiOf({});
+eq("multi 默认开启", mDef.enabled, true);
+eq("multi 默认 15s 扫列表", mDef.listScanSec, 15);
+eq("multi 可显式关闭", multiOf({ multi: { enabled: false } }).enabled, false);
 
 if (failed) {
   console.log(`\n${failed} 项失败`);
