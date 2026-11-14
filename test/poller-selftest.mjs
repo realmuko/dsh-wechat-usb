@@ -9,7 +9,7 @@ const { normalize, isNoise, diffNewText, classifyFresh, chatKeyOf, buildWakeProm
   mentionHit, mentionScopeText, wakeCooldownMs, wake, flushMentionBacklog,
   decideQuiet, settleLastWake, resetQuietState, pushEntry, keyedLines, lineKey, sameAnimationZone,
   isUiNoise, multiOf, parseListRows, chooseCandidate, sameChatName, rememberLines, threadDirected, chatAllowed,
-  openThread, liveThread } = __test;
+  openThread, liveThread, mentionFingerprint, isNewMention } = __test;
 const countsOfFor = (lines) => { const m = new Map(); for (const l of lines) m.set(l.key || l.text, (m.get(l.key || l.text) || 0) + 1); return m; };
 let failed = 0;
 
@@ -330,6 +330,20 @@ eq("私聊默认允许", chatAllowed(cfgW, "zhyk", false), true);
 eq("白名单里的群允许（名字被截断也能对上）", chatAllowed(cfgW, "知乎102个好兄弟有2个人领了", true), true);
 eq("不在白名单的群不允许", chatAllowed(cfgW, "毁灭菇翘嘴软饭群", true), false);
 eq("空白名单不限制群", chatAllowed({ autoReply: { whitelistChats: [] } }, "任意群", true), true);
+
+// 同一条 @ 不能被反复算新的（OCR 措辞抖动：脆脆 / 脆皖）
+{
+  const chatA = "群A@fp-" + Date.now();
+  const line1 = { text: "@升天肥鱼嚼起来费牙的鱼...懂了，是脆脆" };
+  const line2 = { text: "@升天肥鱼：嚼起来费牙的鱼...懂了，是脆皖" };
+  const t0 = Date.now();
+  eq("同一条 @ 第一次算新的", isNewMention(chatA, line1, t0), true);
+  eq("措辞抖动的同一条 @ 不再算", isNewMention(chatA, line2, t0 + 30000), false);
+  eq("15 分钟后可以重新算", isNewMention(chatA, line2, t0 + 16 * 60000), true);
+  const chatB = "群B@fp-" + Date.now();
+  eq("换个群照样算新的", isNewMention(chatB, line1, t0 + 60000), true);
+  eq("指纹只看前 12 字", mentionFingerprint(chatB, line1).startsWith(chatB + "|"), true);
+}
 
 // 私聊串闲置更短（dmThreadTtlMin 默认 5 分钟），群聊串用 threadTtlMin
 {
