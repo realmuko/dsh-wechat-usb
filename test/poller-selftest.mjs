@@ -302,7 +302,11 @@ const rowsM = [
 const c1 = chooseCandidate(cfgM, rowsM, nowM);
 eq("优先挑被 @ 的群", c1 && c1.name, "丙群");
 const c2 = chooseCandidate(cfgM, rowsM, nowM + 1000);
-eq("未读没涨就不再挑", c2, null);
+eq("内容没变就不再挑", c2, null);
+// 预览变了 = 有新消息（未读是 0/1，靠预览判断）
+const rowsM2 = rowsM.map((r) => (r.name === "丙群" ? { ...r, preview: "b: 新的一句" } : r));
+const c3 = chooseCandidate(cfgM, rowsM2, nowM + 2000);
+eq("预览变了会再挑", c3 && c3.name, "丙群");
 
 // 会话名比对：列表里的名字被省略号截断、标题里带「(23)」，都要能对上
 eq("名字被截断也能对上", sameChatName("知乎102个好兄弟有2个人领了“", "知乎102个好兄弟…领了50人份(101)"), true);
