@@ -104,6 +104,14 @@ def main():
     max_width = int(sys.argv[6]) if len(sys.argv) > 6 else 720
     model = sys.argv[7] if len(sys.argv) > 7 else "qwen3-vl:4b-instruct"
     url = sys.argv[8] if len(sys.argv) > 8 else "http://127.0.0.1:11434"
+    # 第 9 个参数：上一帧识别出来的内容（JSON 数组）。给了就让她自己对比，
+    # 同一张图/表情包在动的时候，别每帧都当成新东西重新描述。
+    prev_lines = []
+    if len(sys.argv) > 9 and sys.argv[9].strip():
+        try:
+            prev_lines = [str(x) for x in json.loads(sys.argv[9])][-14:]
+        except Exception:
+            prev_lines = []
 
     im = Image.open(png).convert("RGB")
     w = min(w, im.width - x)
@@ -116,9 +124,21 @@ def main():
     im.save(buf, format="JPEG", quality=88)
     b64 = base64.b64encode(buf.getvalue()).decode()
 
+    prompt = PROMPT
+    if prev_lines:
+        prompt += (
+            "\n\n上一帧识别到的内容（只用来对比，不要照抄）：\n"
+            + "\n".join("  " + x[:60] for x in prev_lines)
+            + "\n\n对比规则（重要）：\n"
+            "· 如果这一帧里的某张图片/表情和上一帧是同一张（位置和内容看起来一样），"
+            "内容就写「图片：与上一帧相同」，不要重新描述它 —— 它在动、在换帧都不算新消息。\n"
+            "· 如果这一帧相对上一帧没有出现新的文字、也没有新的图，最后那行判断必须写「判断｜不值得回」。\n"
+            "· 只有真的出现了新消息（新文字气泡、新图、有人 @ 你），才判「值得回」。"
+        )
+
     payload = {
         "model": model,
-        "prompt": PROMPT,
+        "prompt": prompt,
         "images": [b64],
         "stream": False,
         "keep_alive": "30m",
