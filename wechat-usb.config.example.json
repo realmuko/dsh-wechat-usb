@@ -22,7 +22,8 @@
     "dmThreadTtlMin": 5,
     "mentionMergeSec": 30,
     "replyGapSec": 45,
-    "proactiveInGroups": false
+    "proactiveInGroups": false,
+    "proactiveChats": []
   },
   "ocr": {
     "engine": "rapidocr",
