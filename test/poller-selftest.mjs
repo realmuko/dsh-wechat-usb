@@ -8,7 +8,7 @@ import * as core from "../lib/core.js";
 const { normalize, isNoise, diffNewText, classifyFresh, chatKeyOf, buildWakePrompt,
   mentionHit, mentionScopeText, wakeCooldownMs, wake, flushMentionBacklog,
   decideQuiet, settleLastWake, resetQuietState, pushEntry, keyedLines, lineKey, sameAnimationZone,
-  isUiNoise, multiOf, parseListRows, chooseCandidate, sameChatName } = __test;
+  isUiNoise, multiOf, parseListRows, chooseCandidate, sameChatName, rememberLines } = __test;
 const countsOfFor = (lines) => { const m = new Map(); for (const l of lines) m.set(l.key || l.text, (m.get(l.key || l.text) || 0) + 1); return m; };
 let failed = 0;
 
@@ -310,6 +310,17 @@ eq("群名带成员数", sameChatName("毁灭菇翘嘴软饭群", "毁灭菇翘�
 eq("私聊同名", sameChatName("zhyk", "zhyk"), true);
 eq("不同会话判不同", sameChatName("zhyk", "球球别抓我"), false);
 eq("读不到名字不判错", sameChatName("", "随便"), true);
+
+// 跨会话隔离：换会话时必须清空上下文，别把上一个群的话带进这个群的讨论串
+rememberLines([{ text: "A群说的话", y: 100 }], Date.now(), "chatA");
+rememberLines([{ text: "B群说的话", y: 100 }], Date.now(), "chatB");
+eq("换会话后上下文不串", __test.recentLinesOf().map((x) => x.text), ["B群说的话"]);
+
+// 唤醒 prompt 必须写明跨会话隔离
+const isoPrompt = buildWakePrompt({ autoReply: {} }, "新消息",
+  { mode: "mention", mention: true, mentionText: "@小助手", text: "在吗", chatTitle: "群A" }, Date.now());
+eq("prompt 有跨会话隔离", isoPrompt.includes("跨会话隔离"), true);
+eq("prompt 点名当前会话", isoPrompt.includes("群A"), true);
 
 // 多会话配置默认值
 const mDef = multiOf({});
