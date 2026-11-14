@@ -150,7 +150,10 @@ export function apply(ctx) {
 
   // 独立本机 API：热重载不会丢，设置页直接连它
   try { globalThis.__wxApiServer?.close(); } catch { /* ignore */ }
-  /** 重新 import 自己的 poller 模块：停轮询 → 换模块 → 恢复 schedule → 再拉起来。 */
+  // 让 api.js 也能拿到"当前的模块"：它原本是静态 import，热重载后会一直指向旧模块
+const pollerRef = { current: poller };
+
+/** 重新 import 自己的 poller 模块：停轮询 → 换模块 → 恢复 schedule → 再拉起来。 */
 async function reloadCode() {
   let stopped = false;
   try { poller.stopPolling(getCfg()); stopped = true; } catch { /* ignore */ }
@@ -158,6 +161,7 @@ async function reloadCode() {
   const v = String(Date.now());
   const next = await import(`./lib/poller.js?v=${v}`);
   poller = next;
+  pollerRef.current = next;
   try { if (scheduleRef) poller.setSchedule(scheduleRef); } catch { /* ignore */ }
   const cfg = getCfg();
   if (cfg.autoReply?.enabled) {
@@ -170,7 +174,7 @@ async function reloadCode() {
   return { ok: true, reloadedAt: v, stopped, scheduledStart: cfg.autoReply?.enabled !== false };
 }
 
-const apiServer = startApi(getCfg, PLUGIN_ROOT, undefined, () => ctx, { reload: reloadCode });
+const apiServer = startApi(getCfg, PLUGIN_ROOT, undefined, () => ctx, { reload: reloadCode, pollerRef });
   globalThis.__wxApiServer = apiServer;
   ctx.effect(() => () => {
     try { apiServer.close(); } catch { /* ignore */ }
