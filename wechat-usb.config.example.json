@@ -17,7 +17,8 @@
     "whitelistChats": [],
     "probeSec": 4,
     "manageSpeakUp": true,
-    "dryRun": false
+    "dryRun": false,
+    "threadMaxMin": 20
   },
   "ocr": {
     "engine": "rapidocr",

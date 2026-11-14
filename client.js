@@ -473,6 +473,13 @@ window.__ModuleLoader__.load({
               style: S.num, type: "number", value: cfg.autoReply?.threadTtlMin ?? 10,
               onChange: (e) => patch((c) => { c.autoReply = { ...(c.autoReply || {}), threadTtlMin: Number(e.target.value) }; }),
             })),
+          h(Row, { label: "串最长寿命（分）" },
+            h("input", {
+              style: S.num, type: "number", value: cfg.autoReply?.threadMaxMin ?? 20,
+              onChange: (e) => patch((c) => { c.autoReply = { ...(c.autoReply || {}), threadMaxMin: Number(e.target.value) }; }),
+            })),
+          h("div", { style: S.note },
+            "只看“多久没新消息”不够：群一直有人说话，串就永远不过期，轮询会一直钉在这个群里、回不去列表。到这条寿命上限就强制关串、回列表，给这个群 90 秒冷却。"),
           h(Row, { label: "串内发言间隔（秒）" },
             h("input", {
               style: S.num, type: "number", value: cfg.autoReply?.threadGapSec ?? 20,
