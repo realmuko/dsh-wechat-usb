@@ -6,6 +6,11 @@
 > **零 `@deepseek-ai/*` import**（`link:` 安装的插件解析不到这些包，一个 import 会让整个插件加载失败）；
 > 工具用原始 JSON Schema 直接 `ctx.tools.register`；技能用 `ctx.skills.registerProvider` 随包提供。
 
+> **2.0 有什么不一样**：从「蹲一个群」变成「自己在列表里巡场」——扫未读、挑会话、进群看一眼再决定接不接，
+> 接就开一条讨论串。单会话模式原样保留 v0.3.1 的行为，可以随时切回去。
+> 完整说明见 [`docs/RELEASE-2.0.0.md`](docs/RELEASE-2.0.0.md)，架构与触发链路见 [`docs/architecture.md`](docs/architecture.md)、
+> [`docs/entry-flow.png`](docs/entry-flow.png)。
+
 > 演示图（`assets/*.png`）是脚本生成的合成截图，不含任何真实聊天内容；重新生成见 `scripts/gen-demo-assets.py`。
 
 ## 快速开始
