@@ -14,7 +14,8 @@
     "maxRepliesPerHour": 60,
     "wakeSessionId": "",
     "mentionKeywords": [],
-    "whitelistChats": []
+    "whitelistChats": [],
+    "probeSec": 4
   },
   "ocr": {
     "engine": "rapidocr",
@@ -79,5 +80,15 @@
       "\\badb\\b",
       "\\bdsh\\b"
     ]
+  },
+  "multi": {
+    "enabled": true,
+    "listScanSec": 15,
+    "perChatCooldownSec": 90,
+    "enterSettleMs": 500,
+    "scrollSampleMs": 400,
+    "scrollStableFrames": 2,
+    "scrollTimeoutMs": 5000,
+    "maxScrollScreens": 3
   }
 }
