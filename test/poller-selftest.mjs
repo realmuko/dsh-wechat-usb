@@ -9,7 +9,7 @@ const { normalize, isNoise, diffNewText, classifyFresh, chatKeyOf, buildWakeProm
   mentionHit, mentionScopeText, wakeCooldownMs, wake, flushMentionBacklog,
   decideQuiet, settleLastWake, resetQuietState, pushEntry, keyedLines, lineKey, sameAnimationZone,
   isUiNoise, multiOf, parseListRows, chooseCandidate, sameChatName, rememberLines, threadDirected, chatAllowed,
-  openThread, liveThread, mentionFingerprint, isNewMention } = __test;
+  openThread, liveThread, mentionFingerprint, isNewMention, setLastSpoke } = __test;
 const countsOfFor = (lines) => { const m = new Map(); for (const l of lines) m.set(l.key || l.text, (m.get(l.key || l.text) || 0) + 1); return m; };
 let failed = 0;
 
@@ -392,13 +392,23 @@ eq("空白名单不限制群", chatAllowed({ autoReply: { whitelistChats: [] } }
 }
 
 // 讨论串续命：只有「对着她说的」才延长
-eq("她自己说话续命", threadDirected([{ text: "我：在呢" }]), true);
-eq("引用回复她续命", threadDirected([{ text: "阿瓜：引用：我 那句话真逗" }]), true);
-eq("别人的闲聊不续命", threadDirected([
+// 她自己刚说过话：3 分钟内的绿气泡算续命理由
+const chatD = "群D@directed";
+setLastSpoke(chatD, Date.now() - 60000);
+eq("她自己刚说话续命", threadDirected(chatD, [{ text: "我：在呢" }]), true);
+eq("引用回复她续命", threadDirected(chatD, [{ text: "阿瓜：引用：我 那句话真逗" }]), true);
+eq("别人的闲聊不续命", threadDirected(chatD, [
   { text: "阿瓜：今天吃啥" },
   { text: "阿蓝：随便" },
 ]), false);
-eq("空屏不续命", threadDirected([]), false);
+eq("空屏不续命", threadDirected(chatD, []), false);
+// 后半夜那个 bug：她半小时前说的话还挂在屏幕上，不能一直当成"对着她说"
+const chatE = "群E@directed";
+setLastSpoke(chatE, Date.now() - 30 * 60000);
+eq("很久以前自己说的话不再续命", threadDirected(chatE, [
+  { text: "我：这都后半夜了还开赛" },
+  { text: "阿圆：开赛开赛" },
+]), false);
 
 // 跨会话隔离：换会话时必须清空上下文，别把上一个群的话带进这个群的讨论串
 rememberLines([{ text: "A群说的话", y: 100 }], Date.now(), "chatA");
