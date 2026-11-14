@@ -130,6 +130,9 @@ window.__ModuleLoader__.load({
         row("上次扫描", m.lastScanSec != null ? `${m.lastScanSec} 秒前` : "—"),
         row("最近唤醒", st.quiet?.lastWakeAt ? new Date(st.quiet.lastWakeAt).toLocaleTimeString() : "—"),
         row("最近发送", m.lastSendAt ? new Date(m.lastSendAt).toLocaleTimeString() : "—"),
+        row("回复延迟", m.latency
+          ? `最近 ${m.latency.lastSec}s · 平均 ${m.latency.avgSec}s · 最慢 ${m.latency.maxSec}s（共 ${m.latency.count} 次）`
+          : "还没测到（叫她一次并真的发出去才会有数据）"),
         m.holdSec > 0 ? row("保持中", `停在会话里等她写完，还剩 ${m.holdSec} 秒`) : null,
         m.pendingText > 0 ? row("待补发", `${m.pendingText} 条（冷却结束后一起发）`) : null,
         st.quiet?.budget && st.quiet.budget.length
