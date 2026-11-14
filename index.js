@@ -3,7 +3,10 @@ import { readFileSync, appendFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as core from "./lib/core.js";
-import * as poller from "./lib/poller.js";
+// 用动态 import 拿到 poller，是为了能"热重载自己的代码"：
+// 改完 lib/*.js 后打一下 /api/dsh-wechat-usb/reload-code，无需重启 DSH、也不用在设置页点开关。
+// （静态 import 是 const 绑定，替换不了。）
+let poller = await import("./lib/poller.js");
 import { listSessions } from "./lib/sessions.js";
 import { startApi } from "./lib/api.js";
 import * as rotation from "./lib/rotation.js";
@@ -211,6 +214,34 @@ export function apply(ctx) {
               }
             }
             return json(res, 405, { ok: false, error: "method not allowed" });
+          },
+        },
+        {
+          kind: "exact",
+          path: `${prefix}/reload-code`,
+          handler: async (req, res) => {
+            if (!localOnly(req)) return json(res, 403, { ok: false, error: "local only" });
+            try {
+              let stopped = false;
+              try { poller.stopPolling(getCfg()); stopped = true; } catch { /* ignore */ }
+              const v = String(Date.now());
+              // 带版本号 import：ESM 缓存会被绕过，拿到的是刚写的代码
+              const next = await import(`./lib/poller.js?v=${v}`);
+              poller = next;
+              try { if (scheduleRef) poller.setSchedule(scheduleRef); } catch { /* ignore */ }
+              let status = null;
+              const cfg = getCfg();
+              if (cfg.autoReply?.enabled) {
+                try {
+                  status = poller.startPolling(cfg, cfg.autoReply.intervalSec || 15);
+                } catch (e) {
+                  status = { error: String(e?.message || e) };
+                }
+              }
+              return json(res, 200, { ok: true, reloadedAt: v, stopped, status });
+            } catch (e) {
+              return json(res, 500, { ok: false, error: String(e?.message || e) });
+            }
           },
         },
         {
