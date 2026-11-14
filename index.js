@@ -512,17 +512,24 @@ export function apply(ctx) {
     output: {
       schema: { type: "object", additionalProperties: true },
       render: (_a, v) => text(
-        v.dryRun
-          ? `DRY RUN：${v.ok ? "可发送" : "会被拒绝"}\n${(v.reasons || []).join("\n")}`
-          : v.sent
-            ? `已发送\nscreenshot: ${v.screenshot}`
-            : `未发送${v.blocked ? "（被策略拒绝）" : ""}\n- ${(v.reasons || []).join("\n- ")}`,
+        v.blockedByTest
+          ? `【测试模式】已拦截，没有真的发送\n内容：${v.text}`
+          : v.dryRun
+            ? `DRY RUN：${v.ok ? "可发送" : "会被拒绝"}\n${(v.reasons || []).join("\n")}`
+            : v.sent
+              ? `已发送\nscreenshot: ${v.screenshot}`
+              : `未发送${v.blocked ? "（被策略拒绝）" : ""}\n- ${(v.reasons || []).join("\n- ")}`,
       ),
     },
     async execute(args) {
-      const g = core.guard(getCfg(), args.text);
+      const cfg = getCfg();
+      // 测试模式硬闸：autoReply.dryRun=true 时任何真实发送都被拦下，只回显内容
+      if (!args.dryRun && cfg.autoReply?.dryRun === true) {
+        return { blockedByTest: true, ok: true, text: args.text };
+      }
+      const g = core.guard(cfg, args.text);
       if (args.dryRun) return { dryRun: true, ok: g.ok, reasons: g.reasons };
-      return core.sendText(getCfg(), args.text);
+      return core.sendText(cfg, args.text);
     },
   });
 
