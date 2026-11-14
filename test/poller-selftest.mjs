@@ -311,6 +311,13 @@ eq("私聊同名", sameChatName("zhyk", "zhyk"), true);
 eq("不同会话判不同", sameChatName("zhyk", "球球别抓我"), false);
 eq("读不到名字不判错", sameChatName("", "随便"), true);
 
+// 识图描述每帧措辞不同 —— 必须归一，否则每帧都算"新消息"（曾把唤醒刷成 30 秒 8 次）
+eq("识图描述归一", lineKey({ text: "图片：猫，睁大眼睛，表情惊讶" }), "〔图片〕");
+eq("识图描述归一2", lineKey({ text: "图片：猫，睁大眼睛，有滤镜效果" }), "〔图片〕");
+eq("昵称前缀剥掉", lineKey({ text: "昵称：@升天肥鱼在吗" }), "@升天肥鱼在吗");
+const imgPrev = countsOfFor(keyedLines([{ text: "图片：猫，睁大眼睛" }]));
+eq("换措辞的同一张图不算新", diffNewText(keyedLines([{ text: "图片：猫，睁大眼睛，有滤镜" }]), imgPrev), []);
+
 // 跨会话隔离：换会话时必须清空上下文，别把上一个群的话带进这个群的讨论串
 rememberLines([{ text: "A群说的话", y: 100 }], Date.now(), "chatA");
 rememberLines([{ text: "B群说的话", y: 100 }], Date.now(), "chatB");
