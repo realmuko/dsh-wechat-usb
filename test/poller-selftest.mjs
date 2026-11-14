@@ -8,7 +8,7 @@ import * as core from "../lib/core.js";
 const { normalize, isNoise, diffNewText, classifyFresh, chatKeyOf, buildWakePrompt,
   mentionHit, mentionScopeText, wakeCooldownMs, wake, flushMentionBacklog,
   decideQuiet, settleLastWake, resetQuietState, pushEntry, keyedLines, lineKey, sameAnimationZone,
-  isUiNoise, multiOf, parseListRows, chooseCandidate } = __test;
+  isUiNoise, multiOf, parseListRows, chooseCandidate, sameChatName } = __test;
 const countsOfFor = (lines) => { const m = new Map(); for (const l of lines) m.set(l.key || l.text, (m.get(l.key || l.text) || 0) + 1); return m; };
 let failed = 0;
 
@@ -303,6 +303,13 @@ const c1 = chooseCandidate(cfgM, rowsM, nowM);
 eq("优先挑被 @ 的群", c1 && c1.name, "丙群");
 const c2 = chooseCandidate(cfgM, rowsM, nowM + 1000);
 eq("未读没涨就不再挑", c2, null);
+
+// 会话名比对：列表里的名字被省略号截断、标题里带「(23)」，都要能对上
+eq("名字被截断也能对上", sameChatName("知乎102个好兄弟有2个人领了“", "知乎102个好兄弟…领了50人份(101)"), true);
+eq("群名带成员数", sameChatName("毁灭菇翘嘴软饭群", "毁灭菇翘嘴软饭群(23)"), true);
+eq("私聊同名", sameChatName("zhyk", "zhyk"), true);
+eq("不同会话判不同", sameChatName("zhyk", "球球别抓我"), false);
+eq("读不到名字不判错", sameChatName("", "随便"), true);
 
 // 多会话配置默认值
 const mDef = multiOf({});
