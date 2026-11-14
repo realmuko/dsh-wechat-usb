@@ -554,6 +554,7 @@ export function apply(ctx) {
       type: "object",
       properties: {
         text: { type: "string", description: "要发送的文字" },
+        chat: { type: "string", description: "目标会话标题（建议必填：填了会核对当前屏幕是不是这个会话，防止发错窗口）" },
         dryRun: { type: "boolean", description: "只预检不发送（默认 false）" },
       },
       required: ["text"],
@@ -575,6 +576,17 @@ export function apply(ctx) {
       // 测试模式硬闸：autoReply.dryRun=true 时任何真实发送都被拦下，只回显内容
       if (!args.dryRun && cfg.autoReply?.dryRun === true) {
         return { blockedByTest: true, ok: true, text: args.text };
+      }
+      // 目标会话核对：多会话下"叫醒时的会话"和"现在屏幕上的会话"可能已经不是同一个了
+      if (args.chat) {
+        const got = poller.currentChatTitle(cfg);
+        if (got && !poller.chatNameMatches(args.chat, got)) {
+          return {
+            sent: false,
+            blocked: false,
+            reasons: [`当前停在「${got}」，不是「${args.chat}」：先 wechat_open("${args.chat}") 再发`],
+          };
+        }
       }
       const g = core.guard(cfg, args.text);
       if (args.dryRun) return { dryRun: true, ok: g.ok, reasons: g.reasons };
