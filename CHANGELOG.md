@@ -35,7 +35,7 @@
   空闲时检查当前唤醒会话的体量（轮数或体积），超了就建新会话 + 把
   `~/.dsh/fish-memory/<旧id>.json` 复制到新 id + 同步改「唤醒会话」和「主动搭话目标会话」。
   设置页新增「会话轮换」一栏，含「立即换一次」按钮；`GET/POST /rotate`（65470）。
-  换的时候如果正在讨论串里会被拒绝，避免回复接到旧会话上。
+  **会话只是上下文容器，跟微信讨论串无关**：换的时候不管她是不是正在某个串里聊，串的状态在插件里，不受影响。
 
 `multi: { enabled, listScanSec, perChatCooldownSec, enterSettleMs, scrollSampleMs, scrollStableFrames, scrollTimeoutMs, maxScrollScreens }`。
 `multi.enabled: false` 退回 v1 单会话行为。
