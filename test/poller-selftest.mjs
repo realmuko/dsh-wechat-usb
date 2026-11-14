@@ -282,6 +282,14 @@ eq("私聊行", { name: listRows[1]?.name, unread: listRows[1]?.unread, isGroup:
   { name: "zhyk", unread: 1, isGroup: false });
 // 行中心取的是这一行所有文字的外接框中心（名字 340 + 预览 390/432）
 eq("行中心取自包围盒", listRows[0]?.y, 386);
+// 右边的时间（x≈900）不能被当成会话名
+const listRows2 = parseListRows([
+  { text: "上午10：16", x: 894, y: 378, w: 141 },
+  { text: "知乎102个好兄弟有2个人领了", x: 206, y: 381, w: 627 },
+  { text: "张北海：恭喜啊！做爸爸了！", x: 207, y: 446, w: 410 },
+]);
+eq("时间行不当会话名", listRows2[0]?.name, "知乎102个好兄弟有2个人领了");
+eq("时间行的预览", listRows2[0]?.preview, "张北海：恭喜啊！做爸爸了！");
 
 // 挑会话：@提示 > 私聊 > 群聊；未读没涨就不重复挑
 const cfgM = { autoReply: { enabled: true } };
