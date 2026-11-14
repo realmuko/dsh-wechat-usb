@@ -150,7 +150,25 @@ export function apply(ctx) {
 
   // 独立本机 API：热重载不会丢，设置页直接连它
   try { globalThis.__wxApiServer?.close(); } catch { /* ignore */ }
-  const apiServer = startApi(getCfg, PLUGIN_ROOT, undefined, () => ctx);
+  /** 重新 import 自己的 poller 模块：停轮询 → 换模块 → 恢复 schedule → 再拉起来。 */
+async function reloadCode() {
+  let stopped = false;
+  try { poller.stopPolling(getCfg()); stopped = true; } catch { /* ignore */ }
+  // scheduleRef 此时可能还没注入（启动早期），用当前闭包里的值即可
+  const v = String(Date.now());
+  const next = await import(`./lib/poller.js?v=${v}`);
+  poller = next;
+  try { if (scheduleRef) poller.setSchedule(scheduleRef); } catch { /* ignore */ }
+  let status = null;
+  const cfg = getCfg();
+  if (cfg.autoReply?.enabled) {
+    try { status = poller.startPolling(cfg, cfg.autoReply.intervalSec || 15); }
+    catch (e) { status = { error: String(e?.message || e) }; }
+  }
+  return { ok: true, reloadedAt: v, stopped, status };
+}
+
+const apiServer = startApi(getCfg, PLUGIN_ROOT, undefined, () => ctx, { reload: reloadCode });
   globalThis.__wxApiServer = apiServer;
   ctx.effect(() => () => {
     try { apiServer.close(); } catch { /* ignore */ }
@@ -222,23 +240,7 @@ export function apply(ctx) {
           handler: async (req, res) => {
             if (!localOnly(req)) return json(res, 403, { ok: false, error: "local only" });
             try {
-              let stopped = false;
-              try { poller.stopPolling(getCfg()); stopped = true; } catch { /* ignore */ }
-              const v = String(Date.now());
-              // 带版本号 import：ESM 缓存会被绕过，拿到的是刚写的代码
-              const next = await import(`./lib/poller.js?v=${v}`);
-              poller = next;
-              try { if (scheduleRef) poller.setSchedule(scheduleRef); } catch { /* ignore */ }
-              let status = null;
-              const cfg = getCfg();
-              if (cfg.autoReply?.enabled) {
-                try {
-                  status = poller.startPolling(cfg, cfg.autoReply.intervalSec || 15);
-                } catch (e) {
-                  status = { error: String(e?.message || e) };
-                }
-              }
-              return json(res, 200, { ok: true, reloadedAt: v, stopped, status });
+              return json(res, 200, await reloadCode());
             } catch (e) {
               return json(res, 500, { ok: false, error: String(e?.message || e) });
             }
