@@ -69,6 +69,34 @@ cp wechat-usb.config.example.json wechat-usb.config.json   # Windows: copy
 
 随包带一个技能 `wechat-usb`（`skills/wechat-usb/SKILL.md`），说明标准流程、坐标表与踩坑。
 
+## 两种会话模式（设置页顶部 `multi.enabled`）
+
+多会话这一路改了很多细节（白名单、串续命、私聊开串、发送核对…），它们**只属于多会话模式**。
+关掉开关就是 v0.3.1 的单会话行为，两套逻辑在代码里用 `multiOf(cfg).enabled` 分开：
+
+### 单会话模式（= v0.3.1）
+
+| 行为 | 说明 |
+|---|---|
+| 盯哪个群 | `autoReply.whitelistChats[0]`，不在就搜索进入（`autoOpen`） |
+| 群里没 @ | 按 `noMentionIntervalMin` 自己接一句（v1 本来就这么参与） |
+| 讨论串续命 | 这个群里有任何新消息都算续聊，只看闲置 TTL |
+| 列表扫描 | 不扫；不会进别的会话 |
+| 私聊 | 不单独处理（仍然盯白名单那个群） |
+
+参考实现：`git show v0.3.1:lib/poller.js`（标签 `v0.3.1` 就是单会话基线）。
+
+### 多会话模式（当前默认）
+
+| 行为 | 说明 |
+|---|---|
+| 挑会话 | 停在列表，按未读 + 预览变化发现新会话；群聊必须命中 `whitelistChats`，私聊默认都接 |
+| 开串 | 群：有人 @ / 引用她 / 她自己说话；私聊：一进门就开 |
+| 续命 | 群串只被"对着她说的"续命；私聊每条都续 |
+| 闲置 | 群串 `threadTtlMin`（10 分）、私聊串 `dmThreadTtlMin`（5 分） |
+| 主动开口 | 群里没有 @ 默认**不开口**（`proactiveInGroups` 才开） |
+| 发送 | `wechat_send` 带 `chat` 参数，发送前核对当前会话，发错窗口会被拦下 |
+
 ## 多会话调度（v2）
 
 > 设计文档：[`docs/wechat-multichat-design.md`](docs/wechat-multichat-design.md) · 架构图：[`docs/multichat-architecture.png`](docs/multichat-architecture.png)
