@@ -23,7 +23,8 @@
     "mentionMergeSec": 30,
     "replyGapSec": 45,
     "proactiveInGroups": false,
-    "proactiveChats": []
+    "proactiveChats": [],
+    "proactiveMaxPerHour": 2
   },
   "ocr": {
     "engine": "rapidocr",
