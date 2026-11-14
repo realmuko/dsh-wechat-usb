@@ -135,9 +135,10 @@ eq("normalize 洗掉箭头", normalize("德师傅↑→↓↓↓：晚上好"), 
 }
 
 // @ 不能被普通消息的 90s 唤醒冷却吞掉
-eq("@ 冷却 ≤15s", wakeCooldownMs(cfg, true), 15000);
+eq("@ 合并窗口默认 30s", wakeCooldownMs(cfg, true), 30000);
 eq("普通消息冷却 90s", wakeCooldownMs(cfg, false), 90000);
-eq("@ 冷却可配置但仍有上限", wakeCooldownMs({ autoReply: { wakeCooldownSec: 300 } }, true), 15000);
+eq("@ 合并窗口可配（不能超过普通冷却）", wakeCooldownMs({ autoReply: { wakeCooldownSec: 300 } }, true), 30000);
+eq("@ 合并窗口自定义 10s", wakeCooldownMs({ autoReply: { mentionMergeSec: 10 } }, true), 10000);
 
 // 唤醒 prompt 里必须写死“有 @ → 必须回”，并带上命中的关键词
 {

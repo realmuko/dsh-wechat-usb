@@ -473,6 +473,18 @@ window.__ModuleLoader__.load({
               style: S.num, type: "number", value: cfg.autoReply?.threadTtlMin ?? 10,
               onChange: (e) => patch((c) => { c.autoReply = { ...(c.autoReply || {}), threadTtlMin: Number(e.target.value) }; }),
             })),
+          h(Row, { label: "@ 合并窗口（秒）" },
+            h("input", {
+              style: S.num, type: "number", value: cfg.autoReply?.mentionMergeSec ?? 30,
+              onChange: (e) => patch((c) => { c.autoReply = { ...(c.autoReply || {}), mentionMergeSec: Number(e.target.value) }; }),
+            })),
+          h(Row, { label: "刚回过后静默（秒）" },
+            h("input", {
+              style: S.num, type: "number", value: cfg.autoReply?.replyGapSec ?? 45,
+              onChange: (e) => patch((c) => { c.autoReply = { ...(c.autoReply || {}), replyGapSec: Number(e.target.value) }; }),
+            })),
+          h("div", { style: S.note },
+            "群里一阵 @ 连着来的时候：合并窗口内的几条只叫醒她一次；她刚回完一句，再等这么久才叫下一次，让同一波消息攒在一起。"),
           h(Row, { label: "私聊串闲置（分）" },
             h("input", {
               style: S.num, type: "number", value: cfg.autoReply?.dmThreadTtlMin ?? 5,

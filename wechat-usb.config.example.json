@@ -19,7 +19,9 @@
     "manageSpeakUp": true,
     "dryRun": false,
     "threadMaxMin": 0,
-    "dmThreadTtlMin": 5
+    "dmThreadTtlMin": 5,
+    "mentionMergeSec": 30,
+    "replyGapSec": 45
   },
   "ocr": {
     "engine": "rapidocr",
