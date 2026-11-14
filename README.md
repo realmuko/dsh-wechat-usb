@@ -108,6 +108,13 @@ THREAD 一旦叫醒她（开了讨论串）就钉在这个会话，不再扫列�
 
 `multi.enabled: false` 就退回 v1 的单会话行为（死盯 `whitelistChats[0]`）。
 
+**启停联动（重要）**：`wechat_poll_stop` / `/poll{action:"stop"}` 会**同时关掉 `dsh-speak-up` 的「总开关」**
+（`~/.dsh/speak-up-config.json`），`start` 时再一起打开。
+
+> 否则会出现“轮询已经停了，她还在自己找人搭话”——主动搭话也会开讨论串，两个必须一起停、一起开。
+> 不想联动就把 `autoReply.manageSpeakUp` 设成 `false`（默认 `true`）。
+> 插件热重载/卸载（带 token 的 stop）不会动这个开关，避免一次 reload 就把主动搭话静默关掉。
+
 运行时状态：`wechat_poll_status` 里的 `schedule`（`idle` / `thread`）、`current`（当前会话）、`list`（上次列表扫描结果）。
 
 ## 安全策略（`wechat-usb.config.json` → `policy`）
