@@ -16,6 +16,10 @@
 - **P3「有人@我」跳转**：未读 ≥ 4 且屏里没 @ 时，`findMentionTag()` 定位顶部提示条并点击，
   `waitScrollSettle()` 每 `scrollSampleMs` 截帧、连续 `scrollStableFrames` 帧一致才算停（上限 `scrollTimeoutMs`），
   期间探针静默。
+- **@ 也要合并，别一条一条回**：`@` 路径一直绕过普通消息的合并窗口（只等 15 秒），
+  群里几个人连着 @ 她时就是"每 30~60 秒回一条"。现在 `autoReply.mentionMergeSec`（默认 30 秒）
+  是 @ 的合并窗口，`replyGapSec`（默认 45 秒）让她刚回完一句后这个会话先安静一会儿，
+  prompt 里也写明"这一波好几条就合成一句回"。
 - **私聊/群聊的串闲置分开配**：新增 `autoReply.dmThreadTtlMin`（默认 5 分钟），
   私聊的串（trigger=dm）闲置到点就退出、回列表；群聊仍用 `threadTtlMin`（默认 10 分钟）。
   设置页「私聊串闲置（分）」单独一项。
