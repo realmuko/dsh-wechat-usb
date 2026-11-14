@@ -15,7 +15,8 @@
     "wakeSessionId": "",
     "mentionKeywords": [],
     "whitelistChats": [],
-    "probeSec": 4
+    "probeSec": 4,
+    "manageSpeakUp": true
   },
   "ocr": {
     "engine": "rapidocr",

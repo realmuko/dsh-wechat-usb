@@ -16,6 +16,9 @@
 - **P3「有人@我」跳转**：未读 ≥ 4 且屏里没 @ 时，`findMentionTag()` 定位顶部提示条并点击，
   `waitScrollSettle()` 每 `scrollSampleMs` 截帧、连续 `scrollStableFrames` 帧一致才算停（上限 `scrollTimeoutMs`），
   期间探针静默。
+- **启停联动**：`startPolling` 会打开 `dsh-speak-up` 的「总开关」，`stopPolling`（用户主动停，不带 token）
+  会关掉它。以前「停了轮询」只停了读屏，她的主动搭话还在发消息、还会开讨论串。
+  要单独控制就设 `autoReply.manageSpeakUp: false`。
 - **单窗口约束**：没叫醒她就退回列表，并给该会话 `perChatCooldownSec` 冷却；只有真的唤醒且串活着才钉住。
 - **进群核对**：点击位置取「这一行所有文字的外接框中心」（坐标全部来自真实截图）；进会话后再读一次标题，
   和点的行对不上就退出来、记 `data/enter.log`、冷却这个会话 —— 避免点错会话还在里面回话。
