@@ -16,7 +16,8 @@
     "mentionKeywords": [],
     "whitelistChats": [],
     "probeSec": 4,
-    "manageSpeakUp": true
+    "manageSpeakUp": true,
+    "dryRun": false
   },
   "ocr": {
     "engine": "rapidocr",
