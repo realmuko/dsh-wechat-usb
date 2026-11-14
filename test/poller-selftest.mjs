@@ -8,7 +8,7 @@ import * as core from "../lib/core.js";
 const { normalize, isNoise, diffNewText, classifyFresh, chatKeyOf, buildWakePrompt,
   mentionHit, mentionScopeText, wakeCooldownMs, wake, flushMentionBacklog,
   decideQuiet, settleLastWake, resetQuietState, pushEntry, keyedLines, lineKey, sameAnimationZone,
-  isUiNoise, multiOf, parseListRows, chooseCandidate, sameChatName, rememberLines, threadDirected } = __test;
+  isUiNoise, multiOf, parseListRows, chooseCandidate, sameChatName, rememberLines, threadDirected, chatAllowed } = __test;
 const countsOfFor = (lines) => { const m = new Map(); for (const l of lines) m.set(l.key || l.text, (m.get(l.key || l.text) || 0) + 1); return m; };
 let failed = 0;
 
@@ -317,6 +317,13 @@ eq("识图描述归一2", lineKey({ text: "图片：猫，睁大眼睛，有滤�
 eq("昵称前缀剥掉", lineKey({ text: "昵称：@小助手在吗" }), "@小助手在吗");
 const imgPrev = countsOfFor(keyedLines([{ text: "图片：猫，睁大眼睛" }]));
 eq("换措辞的同一张图不算新", diffNewText(keyedLines([{ text: "图片：猫，睁大眼睛，有滤镜" }]), imgPrev), []);
+
+// 会话准入：私聊默认允许；群聊要命中白名单；空白名单 = 不限制
+const cfgW = { autoReply: { whitelistChats: ["周末爬山小分队50人份"] } };
+eq("私聊默认允许", chatAllowed(cfgW, "阿杰", false), true);
+eq("白名单里的群允许（名字被截断也能对上）", chatAllowed(cfgW, "周末爬山小分队", true), true);
+eq("不在白名单的群不允许", chatAllowed(cfgW, "摸鱼闲聊群", true), false);
+eq("空白名单不限制群", chatAllowed({ autoReply: { whitelistChats: [] } }, "任意群", true), true);
 
 // 讨论串续命：只有「对着她说的」才延长
 eq("她自己说话续命", threadDirected([{ text: "我：在呢" }]), true);
