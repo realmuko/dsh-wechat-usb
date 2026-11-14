@@ -24,7 +24,9 @@
     "replyGapSec": 45,
     "proactiveInGroups": false,
     "proactiveChats": [],
-    "proactiveMaxPerHour": 2
+    "proactiveMaxPerHour": 2,
+    "proactiveIntervalMin": 30,
+    "proactiveDmBlacklist": []
   },
   "ocr": {
     "engine": "rapidocr",
