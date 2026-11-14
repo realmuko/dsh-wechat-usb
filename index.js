@@ -159,13 +159,15 @@ async function reloadCode() {
   const next = await import(`./lib/poller.js?v=${v}`);
   poller = next;
   try { if (scheduleRef) poller.setSchedule(scheduleRef); } catch { /* ignore */ }
-  let status = null;
   const cfg = getCfg();
   if (cfg.autoReply?.enabled) {
-    try { status = poller.startPolling(cfg, cfg.autoReply.intervalSec || 15); }
-    catch (e) { status = { error: String(e?.message || e) }; }
+    // 别在这里同步跑第一轮：startPolling 会立刻扫一遍列表（OCR 要好几秒），
+    // 调用方（curl / 设置页）会以为接口卡住。放到下一拍再启动。
+    setTimeout(() => {
+      try { poller.startPolling(cfg, cfg.autoReply.intervalSec || 15); } catch { /* ignore */ }
+    }, 300);
   }
-  return { ok: true, reloadedAt: v, stopped, status };
+  return { ok: true, reloadedAt: v, stopped, scheduledStart: cfg.autoReply?.enabled !== false };
 }
 
 const apiServer = startApi(getCfg, PLUGIN_ROOT, undefined, () => ctx, { reload: reloadCode });
