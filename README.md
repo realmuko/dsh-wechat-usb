@@ -136,6 +136,17 @@ plugin_manager set_bundle target="dsh-wechat-usb" enabled=true
 - ADB：用 `platform-tools` 里的 `adb`，序列号填 `adb devices` 里那台设备（示例配置留的是占位符 `YOUR_DEVICE_SERIAL`）；
 - 中文注入依赖 ADBKeyboard（IME id `com.android.adbkeyboard/.AdbIME`），用完自动切回默认输入法（`ime.default`）。
 
+## 版本路线
+
+- **v1.x（当前 `0.3.1`）**：单会话。死盯 `autoReply.whitelistChats` 里的那一个群，逐帧 OCR 判新消息。
+- **v2.0（开发中）**：多会话调度。平时停在聊天列表、按**未读数变化**发现新会话，进群确认后开讨论串；
+  串活着就留在该会话不切走（**单窗口是硬约束**）。@ 不在可见区时才点「有人@我」并等滚动停。
+
+  设计：[`docs/wechat-multichat-design.md`](docs/wechat-multichat-design.md) ·
+  架构图：[`docs/multichat-architecture.png`](docs/multichat-architecture.png)
+
+  > 单会话基线已打标签 `v0.3.1`，随时可以 `git checkout v0.3.1` 回滚。
+
 ## 目录
 
 - `index.js` — 插件入口（零外部 import；注册工具 + 1 个技能）
