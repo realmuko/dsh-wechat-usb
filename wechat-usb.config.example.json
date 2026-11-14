@@ -96,7 +96,8 @@
     "scrollSampleMs": 400,
     "scrollStableFrames": 2,
     "scrollTimeoutMs": 5000,
-    "maxScrollScreens": 3
+    "maxScrollScreens": 3,
+    "enterBySearch": true
   },
   "rotation": {
     "enabled": false,
