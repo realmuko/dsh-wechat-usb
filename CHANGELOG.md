@@ -17,6 +17,8 @@
   `waitScrollSettle()` 每 `scrollSampleMs` 截帧、连续 `scrollStableFrames` 帧一致才算停（上限 `scrollTimeoutMs`），
   期间探针静默。
 - **单窗口约束**：没叫醒她就退回列表，并给该会话 `perChatCooldownSec` 冷却；只有真的唤醒且串活着才钉住。
+- **进群核对**：点击位置取「这一行所有文字的外接框中心」（坐标全部来自真实截图）；进会话后再读一次标题，
+  和点的行对不上就退出来、记 `data/enter.log`、冷却这个会话 —— 避免点错会话还在里面回话。
 
 ### 新增配置
 

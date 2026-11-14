@@ -280,6 +280,8 @@ eq("群行", { name: listRows[0]?.name, unread: listRows[0]?.unread, isGroup: li
   { name: "毁灭菇翘嘴软饭群", unread: 15, isGroup: true });
 eq("私聊行", { name: listRows[1]?.name, unread: listRows[1]?.unread, isGroup: listRows[1]?.isGroup },
   { name: "zhyk", unread: 1, isGroup: false });
+// 行中心取的是这一行所有文字的外接框中心（名字 340 + 预览 390/432）
+eq("行中心取自包围盒", listRows[0]?.y, 386);
 
 // 挑会话：@提示 > 私聊 > 群聊；未读没涨就不重复挑
 const cfgM = { autoReply: { enabled: true } };
