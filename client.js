@@ -68,6 +68,75 @@ window.__ModuleLoader__.load({
         props.children);
     }
 
+    /** 运行状态：每 5 秒拉一次 /poll，把"现在在干嘛、下次什么时候动"直接摆出来。 */
+    function LiveStatus() {
+      const [st, setSt] = React.useState(null);
+      const [err, setErr] = React.useState("");
+
+      React.useEffect(() => {
+        let alive = true;
+        const load = async () => {
+          try {
+            const r = await fetch(`${API}/poll`);
+            const j = await readJson(r);
+            if (!alive) return;
+            if (j.ok) { setSt(j.status); setErr(""); }
+          } catch (e) {
+            if (alive) setErr(String(e?.message || e));
+          }
+        };
+        load();
+        const t = setInterval(load, 5000);
+        return () => { alive = false; clearInterval(t); };
+      }, []);
+
+      if (err) return h("div", { style: S.group }, h("div", { style: S.groupTitle }, "运行状态"), h("div", { style: { fontSize: 12, color: "#dc2626" } }, `读取失败：${err}`));
+      if (!st) return h("div", { style: S.group }, h("div", { style: S.groupTitle }, "运行状态"), h("div", { style: S.note }, "读取中…"));
+
+      const m = st.monitor || {};
+      const p = m.proactive || {};
+      const thread = st.thread;
+      const dot = (ok) => h("span", {
+        style: {
+          display: "inline-block", width: 8, height: 8, borderRadius: 4, marginRight: 6,
+          background: ok ? "#16a34a" : "#9ca3af",
+        },
+      });
+      const row = (label, value) => h("div", { style: { display: "flex", gap: 10, margin: "0 0 6px", fontSize: 12 } },
+        h("span", { style: { width: 96, flex: "none", opacity: 0.55 } }, label),
+        h("span", { style: { flex: 1, minWidth: 0, whiteSpace: "pre-wrap", lineHeight: 1.5 } }, value));
+
+      const schedule = st.running
+        ? (st.schedule === "thread"
+          ? `${thread && thread.live ? "讨论串中" : "会话页（等待/收尾）"}${thread ? ` · ${thread.id} · ${thread.trigger} · 已 ${thread.ageMin} 分钟 · 闲置 ${thread.idleMin} 分钟` : ""}`
+          : "空闲：扫聊天列表")
+        : "未运行（轮询已停）";
+
+      const proactiveLine = p.enabled
+        ? (p.due ? `已到点，正在等空档（本小时 ${p.hourly}/${p.maxPerHour} 次）` : `还差 ${p.dueInMin} 分钟（本小时 ${p.hourly}/${p.maxPerHour} 次）`)
+        : "未开启（proactiveInGroups 关）";
+
+      return h("div", { style: S.group },
+        h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", margin: "0 0 10px" } },
+          h("div", { style: S.groupTitle }, "运行状态"),
+          h("span", { style: { fontSize: 11, opacity: 0.5 } }, st.running ? "运行中 · 每 5 秒刷新" : "已停止")),
+        row("轮询", h("span", {}, dot(st.running), st.running ? `进行中（${st.schedule === "thread" ? "串内" : "空闲"}）` : "已停止")),
+        row("调度", schedule),
+        row("当前会话", st.current ? st.current.name : "（无，停在列表）"),
+        row("主动搭话", proactiveLine),
+        p.enabled && p.candidates && p.candidates.length
+          ? row("候选", p.candidates.slice(0, 4).join(" ｜ "))
+          : null,
+        row("上次扫描", m.lastScanSec != null ? `${m.lastScanSec} 秒前` : "—"),
+        row("最近唤醒", st.quiet?.lastWakeAt ? new Date(st.quiet.lastWakeAt).toLocaleTimeString() : "—"),
+        row("最近发送", m.lastSendAt ? new Date(m.lastSendAt).toLocaleTimeString() : "—"),
+        m.holdSec > 0 ? row("保持中", `停在会话里等她写完，还剩 ${m.holdSec} 秒`) : null,
+        m.pendingText > 0 ? row("待补发", `${m.pendingText} 条（冷却结束后一起发）`) : null,
+        st.quiet?.budget && st.quiet.budget.length
+          ? row("冷却中", st.quiet.budget.map((b) => `${b.chat}（${b.waitSec}s${b.paused ? "·退避" : ""}）`).join(" ｜ "))
+          : null);
+    }
+
     /** 会话轮换：攒够上下文就开新会话 + 搬记忆 + 改绑定。 */
     function RotationPanel(props) {
       const cfg = props.cfg || {};
@@ -392,6 +461,8 @@ window.__ModuleLoader__.load({
             value: (policy.allowedChats || []).join("\n"),
             onChange: (e) => patch((c) => { c.policy.allowedChats = e.target.value.split("\n").map((s) => s.trim()).filter(Boolean); }),
           })),
+
+        h(LiveStatus, {}),
 
         (() => {
           const multiOn = cfg.multi?.enabled !== false;
