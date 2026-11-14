@@ -394,6 +394,23 @@ window.__ModuleLoader__.load({
           })),
 
         h("div", { style: S.group },
+          h("div", { style: S.groupTitle }, "会话模式"),
+          h("label", { style: { display: "flex", gap: 8, alignItems: "flex-start", margin: "0 0 8px", cursor: "pointer" } },
+            h("input", {
+              type: "checkbox", checked: cfg.multi?.enabled !== false, style: { marginTop: 2 },
+              onChange: (e) => patch((c) => { c.multi = { ...(c.multi || {}), enabled: e.target.checked }; }),
+            }),
+            h("span", {},
+              h("b", {}, "多会话模式（关掉 = 单会话，回到 v0.3.1 的行为）"),
+              h("br"),
+              h("span", { style: { opacity: 0.6, fontSize: 11 } },
+                "多会话：停在聊天列表，按未读发现新会话，进群看情况再开讨论串；只在有人 @ / 引用她 / 她自己说话时才续命。"))),
+          h("div", { style: S.note },
+            cfg.multi?.enabled === false
+              ? "当前：单会话模式 —— 死盯「白名单聊天」里的第一个群；群里没 @ 也按间隔接话；讨论串里任何新消息都算续聊。这就是 v0.3.1 的行为。"
+              : "当前：多会话模式 —— 自己扫列表、挑会话；群聊要白名单；私聊默认都接；串只被“对着她说的”续命。")),
+
+        h("div", { style: S.group },
           h("div", { style: S.groupTitle }, "自动回复"),
           h("label", { style: { display: "flex", gap: 8, alignItems: "flex-start", margin: "0 0 10px", cursor: "pointer" } },
             h("input", {
