@@ -1,5 +1,28 @@
 # 更新记录
 
+## 0.3.1 — 热修（2026-11-14）
+
+单会话版的收尾：把「卡」和「叫不醒」这两件事修掉，然后开 v2.0 多会话。
+
+### 稳定性
+
+- **标题条 OCR 不再每帧重建模型**（`titleOf()`）：frame 模式（含 `ds-vision`）下每个变化帧都会起一个
+  Python 进程、在 `main()` 里重新 `RapidOCR()`（实测台式机 1.5s / 笔记本 2.9s），且走的是
+  `execFileSync` —— 这段时间整个 DSH 事件循环被堵死，界面表现成卡死。
+  改成「缓存 + 异步刷新（TTL 30s）+ 冷启动同步一次」：笔记本 60 秒内 Python 进程从 13 个降到 2 个，
+  CPU 从 8%~96% 反复跳变成常态 1%~10%。
+- **兼容 DSH 0.2.1 / 0.2.2 的 `schedule.create` 签名**：0.2.1 是 `create(sessionId, request)`，
+  0.2.2 是 `create(request, sessionId)`。笔记本装 0.2.1，插件按 0.2.2 写，每次唤醒都抛
+  `title is required` 又被 try/catch 吞掉 —— 轮询一直在跑，但一次都没叫醒过。
+  新增 `scheduleCreate()` 双签名兼容；唤醒失败写 `data/wake-error.log`，不再静默。
+- **`num_ctx` 8192 → 4096**（`vl_ocr.py` / `judge_worth.py` 必须同步改）：6GB 显存上 8192 会把模型顶到
+  4.8GB、24% 溢出到 CPU（单帧 3.4s）；4096 能整份进显存（3.6GB / 100% GPU），单帧 2.1s。
+
+### 文档
+
+- 新增 `docs/wechat-multichat-design.md`：多会话调度的完整设计（状态机 / 信号可信度 / 参数 / 落地顺序）。
+- 新增 `docs/multichat-architecture.png`：给人看的状态机图。
+
 ## 0.3.0 — 判断链路闭环（2026-11-13）
 
 这一天主要在修「判断」这一段：谁判、判什么、判了给谁用。

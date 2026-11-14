@@ -27,3 +27,7 @@ Thumbs.db
 # 存档备份（换会话/改代码前的快照）
 *.bak-*
 *.bak-*.
+
+# Python 编译缓存（py_compile 生成）
+__pycache__/
+*.pyc
