@@ -473,6 +473,16 @@ window.__ModuleLoader__.load({
               style: S.num, type: "number", value: cfg.autoReply?.threadTtlMin ?? 10,
               onChange: (e) => patch((c) => { c.autoReply = { ...(c.autoReply || {}), threadTtlMin: Number(e.target.value) }; }),
             })),
+          h("label", { style: { display: "flex", gap: 8, alignItems: "flex-start", margin: "0 0 8px", cursor: "pointer" } },
+            h("input", {
+              type: "checkbox", checked: cfg.autoReply?.proactiveInGroups === true, style: { marginTop: 2 },
+              onChange: (e) => patch((c) => { c.autoReply = { ...(c.autoReply || {}), proactiveInGroups: e.target.checked }; }),
+            }),
+            h("span", {},
+              h("b", {}, "允许在群里主动搭话（默认关）"),
+              h("br"),
+              h("span", { style: { opacity: 0.6, fontSize: 11 } },
+                "关着时：群里没有 @ 她、也没有活着的讨论串，就只看不回。打开后才会按“无@参与间隔”自己开口。"))),
           h(Row, { label: "@ 合并窗口（秒）" },
             h("input", {
               style: S.num, type: "number", value: cfg.autoReply?.mentionMergeSec ?? 30,
