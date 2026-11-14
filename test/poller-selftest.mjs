@@ -316,6 +316,11 @@ eq("群名带成员数", sameChatName("毁灭菇翘嘴软饭群", "毁灭菇翘�
 eq("私聊同名", sameChatName("zhyk", "zhyk"), true);
 eq("不同会话判不同", sameChatName("zhyk", "球球别抓我"), false);
 eq("读不到名字不判错", sameChatName("", "随便"), true);
+// 标题前面粘 OCR 噪声也要认得出来（实测 "〈9知乎102个好兄…"）
+eq("标题带前缀噪声", sameChatName("知乎102个好兄弟有2个人领了", "〈9知乎102个好兄“了50人份（101）"), true);
+eq("短名字照样比", sameChatName("zhyk", "zhyk 0"), true);
+eq("还是能分开不同群", sameChatName("毁灭菇翘嘴软饭群", "知乎102个好兄弟有2个人领了"), false);
+
 
 // 识图描述每帧措辞不同 —— 必须归一，否则每帧都算"新消息"（曾把唤醒刷成 30 秒 8 次）
 eq("识图描述归一", lineKey({ text: "图片：猫，睁大眼睛，表情惊讶" }), "〔图片〕");
