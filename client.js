@@ -473,6 +473,13 @@ window.__ModuleLoader__.load({
               style: S.num, type: "number", value: cfg.autoReply?.threadTtlMin ?? 10,
               onChange: (e) => patch((c) => { c.autoReply = { ...(c.autoReply || {}), threadTtlMin: Number(e.target.value) }; }),
             })),
+          h(Row, { label: "私聊串闲置（分）" },
+            h("input", {
+              style: S.num, type: "number", value: cfg.autoReply?.dmThreadTtlMin ?? 5,
+              onChange: (e) => patch((c) => { c.autoReply = { ...(c.autoReply || {}), dmThreadTtlMin: Number(e.target.value) }; }),
+            })),
+          h("div", { style: S.note },
+            "私聊是“一对一在等她回”，闲置时间建议比群聊短：过了这个点还没新消息就退出私聊、回列表。"),
           h(Row, { label: "串最长寿命（分）" },
             h("input", {
               style: S.num, type: "number", value: cfg.autoReply?.threadMaxMin ?? 0,
