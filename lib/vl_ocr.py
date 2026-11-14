@@ -37,7 +37,8 @@ PROMPT = """这是安卓微信聊天窗口的截图（手机状态栏、时间�
 5. 引用别人消息的，内容写「引用：<被引用的昵称> <原文摘要>」。
 6. 语音写「语音：<时长>」；红包/转账写「红包：<金额>」。
 7. 只输出这些行，不要解释、不要编号、不要空行。
-8. 最末尾单独再输出一行，判断「这一屏最新的内容值不值得有人接一句话」：
+8. 昵称必须是真实昵称（气泡上方那行灰字）：看不清或没有，就沿用上一个真实昵称。绝不能写「昵称」「群友」「某人」这类占位词。
+9. 最末尾单独再输出一行，判断「这一屏最新的内容值不值得有人接一句话」：
 判断｜值得回
 或者
 判断｜不值得回
@@ -140,7 +141,15 @@ def main():
 
     rows, title, verdict = split_lines(resp.get("response") or "")
     lines = []
+    last_nick = None
+    # 模型偶尔把格式里的「昵称」二字照抄出来当昵称（占位符）。那不是名字，
+    # 遇到就沿用上一个真实昵称，否则她会看到「昵称：在吗」，根本不知道谁说的。
+    PLACEHOLDER = {"昵称", "群友", "某人", "未知", "对方", "用户", "发信人"}
     for nick, content in rows:
+        if nick and nick.strip(" ：:") in PLACEHOLDER:
+            nick = last_nick
+        elif nick:
+            last_nick = nick
         text = f"{nick}：{content}" if nick else content
         lines.append({
             "text": text,
