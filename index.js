@@ -126,7 +126,7 @@ export function apply(ctx) {
       try {
         const cfg = getCfg();
         if (!rotation.rotationOf(cfg).enabled) return;
-        if (poller.pollStatus(cfg).schedule === "thread") return; // 正在聊，别中途换
+        // 会话只是上下文容器：不看她现在在哪个会话里聊天，攒够了就换
         busy = true;
         const r = await rotation.maybeRotate(ctx, cfg, {});
         if (r && r.ok) console.log(`[dsh-wechat-usb] 会话轮换 ${r.from} → ${r.to}（${r.reason}）`);
@@ -287,10 +287,7 @@ export function apply(ctx) {
               }
               if (req.method === "POST") {
                 const body = await readJsonBody(req);
-                // 只在空闲时换（正在串里聊天的时候换会把回复接到旧会话上）
-                if (poller.pollStatus(cfg).schedule === "thread" && !body?.force) {
-                  return json(res, 409, { ok: false, error: "正在某个会话的讨论串里，等它结束再换", skipped: "busy-thread" });
-                }
+                // 会话只是上下文容器，跟微信的讨论串无关：随时可以换
                 const r = await rotation.maybeRotate(ctx, cfg, { force: Boolean(body?.force) });
                 return json(res, 200, { ok: true, ...r });
               }
