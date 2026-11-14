@@ -68,6 +68,85 @@ window.__ModuleLoader__.load({
         props.children);
     }
 
+    /** 会话轮换：攒够上下文就开新会话 + 搬记忆 + 改绑定。 */
+    function RotationPanel(props) {
+      const cfg = props.cfg || {};
+      const r = cfg.rotation || {};
+      const [info, setInfo] = React.useState(null);
+      const [note, setNote] = React.useState("");
+      const [busy, setBusy] = React.useState(false);
+
+      const load = async () => {
+        try {
+          const res = await fetch(`${API}/rotate`);
+          const j = await readJson(res);
+          if (j.ok) setInfo(j);
+        } catch { /* 读不到就只显示设置 */ }
+      };
+      React.useEffect(() => { load(); }, []);
+
+      const spin = async () => {
+        setBusy(true);
+        try {
+          const res = await fetch(`${API}/rotate`, {
+            method: "POST", headers: { "content-type": "application/json" },
+            body: JSON.stringify({ force: true }),
+          });
+          const j = await readJson(res);
+          setNote(j.ok
+            ? (j.to ? `已换到新会话：${String(j.to).slice(0, 22)}…（${j.reason || "手动"}）` : `没有换：${j.error || j.skipped || "未知原因"}`)
+            : `失败：${j.error || j.skipped || "未知"}`);
+          load();
+        } catch (e) {
+          setNote("失败：" + e.message);
+        } finally {
+          setBusy(false);
+        }
+      };
+
+      const num = (k, d, label) => h(Row, { label },
+        h("input", {
+          style: S.num, type: "number", value: r[k] ?? d,
+          onChange: (e) => props.patch((c) => { c.rotation = { ...(c.rotation || {}), [k]: Number(e.target.value) }; }),
+        }));
+
+      const flag = (k, label, hint) => h("label", { style: { display: "flex", gap: 8, alignItems: "flex-start", margin: "0 0 8px", cursor: "pointer" } },
+        h("input", {
+          type: "checkbox", checked: r[k] !== false, style: { marginTop: 2 },
+          onChange: (e) => props.patch((c) => { c.rotation = { ...(c.rotation || {}), [k]: e.target.checked }; }),
+        }),
+        h("span", {}, h("b", {}, label), hint ? h("br") : null,
+          hint ? h("span", { style: { opacity: 0.6, fontSize: 11 } }, hint) : null));
+
+      const st = info && info.stats;
+      return h("div", { style: S.group },
+        h("div", { style: S.groupTitle }, "会话轮换（攒满上下文就换新会话）"),
+        h("label", { style: { display: "flex", gap: 8, alignItems: "flex-start", margin: "0 0 10px", cursor: "pointer" } },
+          h("input", {
+            type: "checkbox", checked: r.enabled === true, style: { marginTop: 2 },
+            onChange: (e) => props.patch((c) => { c.rotation = { ...(c.rotation || {}), enabled: e.target.checked }; }),
+          }),
+          h("span", {},
+            h("b", {}, "开启自动轮换"),
+            h("br"),
+            h("span", { style: { opacity: 0.65, fontSize: 12 } },
+              "空闲时检查：当前唤醒会话攒到阈值 → 新建一个会话 → 记忆文件复制过去 → 唤醒会话和主动搭话的目标会话一起改成新的。"))),
+        num("maxTurns", 300, "最多轮数"),
+        num("maxSizeMB", 12, "最多体积（MB）"),
+        num("minAgeMin", 60, "最短存活（分）"),
+        num("cooldownMin", 30, "两次间隔（分）"),
+        flag("switchSpeakUp", "同步改「主动搭话」的目标会话"),
+        flag("switchWake", "同步改「唤醒会话」"),
+        h("div", { style: S.note },
+          st
+            ? `当前唤醒会话：${String((info && info.stats && info.stats.file) || "").split(/[\\/]/).slice(-3, -1).join("/") || "?"} · ${st.sizeMB} MB · ${st.turns} 轮 · 已 ${st.ageMin} 分钟`
+            : "还没读到当前会话体量（点「刷新体量」试试）"),
+        h("div", { style: { display: "flex", gap: 10, alignItems: "center", marginTop: 8 } },
+          h("button", { style: S.btn, onClick: load, disabled: busy }, "刷新体量"),
+          h("button", { style: S.btn, onClick: spin, disabled: busy }, busy ? "处理中…" : "立即换一次")),
+        note ? h("div", { style: S.msg(true) }, note) : null);
+    }
+
     function PairEditor(props) {
       const [x, y] = pair(props.value);
       const set = (nx, ny) => props.onChange([nx, ny]);
@@ -422,6 +501,9 @@ window.__ModuleLoader__.load({
               : "状态未知"),
           h("div", { style: S.note },
             "回复由 watcher 在检测到新消息时唤醒模型（一次性 schedule，目标就是上面的「唤醒会话」）；没有新消息就不调用模型。")),
+
+        h("div", { style: S.group },
+          h(RotationPanel, { cfg, patch, S, h })),
 
         h("div", { style: S.group },
           h("div", { style: S.groupTitle }, "坐标示意图"),

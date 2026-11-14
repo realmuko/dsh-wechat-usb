@@ -92,5 +92,14 @@
     "scrollStableFrames": 2,
     "scrollTimeoutMs": 5000,
     "maxScrollScreens": 3
+  },
+  "rotation": {
+    "enabled": false,
+    "maxTurns": 300,
+    "maxSizeMB": 12,
+    "minAgeMin": 60,
+    "cooldownMin": 30,
+    "switchSpeakUp": true,
+    "switchWake": true
   }
 }

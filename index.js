@@ -6,6 +6,7 @@ import * as core from "./lib/core.js";
 import * as poller from "./lib/poller.js";
 import { listSessions } from "./lib/sessions.js";
 import { startApi } from "./lib/api.js";
+import * as rotation from "./lib/rotation.js";
 
 const PLUGIN_ROOT = fileURLToPath(new URL(".", import.meta.url));
 
@@ -117,6 +118,26 @@ export function apply(ctx) {
     };
   }, "dsh-wechat-usb: auto poller");
 
+  // 会话轮换：上下文攒到阈值就开新会话 + 搬记忆 + 改绑定（每 5 分钟看一次）
+  ctx.effect(() => {
+    let busy = false;
+    const t = setInterval(async () => {
+      if (busy) return;
+      try {
+        const cfg = getCfg();
+        if (!rotation.rotationOf(cfg).enabled) return;
+        if (poller.pollStatus(cfg).schedule === "thread") return; // 正在聊，别中途换
+        busy = true;
+        const r = await rotation.maybeRotate(ctx, cfg, {});
+        if (r && r.ok) console.log(`[dsh-wechat-usb] 会话轮换 ${r.from} → ${r.to}（${r.reason}）`);
+      } catch { /* ignore */ } finally {
+        busy = false;
+      }
+    }, 5 * 60 * 1000);
+    if (t.unref) t.unref();
+    return () => clearInterval(t);
+  }, "dsh-wechat-usb: session rotation");
+
   // 旧截图会一直堆在 data/shots（一张 ~400KB），加载时清一次，只留最近几百张
   try { poller.pruneShotsNow(getCfg()); } catch { /* ignore */ }
 
@@ -126,7 +147,7 @@ export function apply(ctx) {
 
   // 独立本机 API：热重载不会丢，设置页直接连它
   try { globalThis.__wxApiServer?.close(); } catch { /* ignore */ }
-  const apiServer = startApi(getCfg, PLUGIN_ROOT);
+  const apiServer = startApi(getCfg, PLUGIN_ROOT, undefined, () => ctx);
   globalThis.__wxApiServer = apiServer;
   ctx.effect(() => () => {
     try { apiServer.close(); } catch { /* ignore */ }
@@ -243,6 +264,37 @@ export function apply(ctx) {
               const url = new URL(req.url, "http://localhost");
               const limit = Number(url.searchParams.get("limit")) || 200;
               return json(res, 200, { ok: true, sessions: listSessions({ limit }) });
+            } catch (e) {
+              return json(res, 500, { ok: false, error: String(e?.message || e) });
+            }
+          },
+        },
+        {
+          kind: "exact",
+          path: `${prefix}/rotate`,
+          handler: async (req, res) => {
+            if (!localOnly(req)) return json(res, 403, { ok: false, error: "local only" });
+            try {
+              const cfg = getCfg();
+              if (req.method === "GET") {
+                const sid = String(cfg.autoReply?.wakeSessionId || "");
+                return json(res, 200, {
+                  ok: true,
+                  rotation: rotation.rotationOf(cfg),
+                  stats: rotation.sessionStats(sid),
+                  schedule: poller.pollStatus(cfg).schedule,
+                });
+              }
+              if (req.method === "POST") {
+                const body = await readJsonBody(req);
+                // 只在空闲时换（正在串里聊天的时候换会把回复接到旧会话上）
+                if (poller.pollStatus(cfg).schedule === "thread" && !body?.force) {
+                  return json(res, 409, { ok: false, error: "正在某个会话的讨论串里，等它结束再换", skipped: "busy-thread" });
+                }
+                const r = await rotation.maybeRotate(ctx, cfg, { force: Boolean(body?.force) });
+                return json(res, 200, { ok: true, ...r });
+              }
+              return json(res, 405, { ok: false, error: "method not allowed" });
             } catch (e) {
               return json(res, 500, { ok: false, error: String(e?.message || e) });
             }
