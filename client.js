@@ -475,11 +475,11 @@ window.__ModuleLoader__.load({
             })),
           h(Row, { label: "串最长寿命（分）" },
             h("input", {
-              style: S.num, type: "number", value: cfg.autoReply?.threadMaxMin ?? 20,
+              style: S.num, type: "number", value: cfg.autoReply?.threadMaxMin ?? 0,
               onChange: (e) => patch((c) => { c.autoReply = { ...(c.autoReply || {}), threadMaxMin: Number(e.target.value) }; }),
             })),
           h("div", { style: S.note },
-            "只看“多久没新消息”不够：群一直有人说话，串就永远不过期，轮询会一直钉在这个群里、回不去列表。到这条寿命上限就强制关串、回列表，给这个群 90 秒冷却。"),
+            "真正的续命判据：串里有人**对着她**说话（@ 她、引用回复她、或她自己刚说完）才延长；别人的闲聊不延长。填大于 0 = 再加一道硬上限（分钟），到点强制关串，默认 0 关闭。"),
           h(Row, { label: "串内发言间隔（秒）" },
             h("input", {
               style: S.num, type: "number", value: cfg.autoReply?.threadGapSec ?? 20,
