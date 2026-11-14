@@ -8,7 +8,8 @@ import * as core from "../lib/core.js";
 const { normalize, isNoise, diffNewText, classifyFresh, chatKeyOf, buildWakePrompt,
   mentionHit, mentionScopeText, wakeCooldownMs, wake, flushMentionBacklog,
   decideQuiet, settleLastWake, resetQuietState, pushEntry, keyedLines, lineKey, sameAnimationZone,
-  isUiNoise, multiOf, parseListRows, chooseCandidate, sameChatName, rememberLines, threadDirected, chatAllowed } = __test;
+  isUiNoise, multiOf, parseListRows, chooseCandidate, sameChatName, rememberLines, threadDirected, chatAllowed,
+  openThread, liveThread } = __test;
 const countsOfFor = (lines) => { const m = new Map(); for (const l of lines) m.set(l.key || l.text, (m.get(l.key || l.text) || 0) + 1); return m; };
 let failed = 0;
 
@@ -328,6 +329,20 @@ eq("私聊默认允许", chatAllowed(cfgW, "zhyk", false), true);
 eq("白名单里的群允许（名字被截断也能对上）", chatAllowed(cfgW, "知乎102个好兄弟有2个人领了", true), true);
 eq("不在白名单的群不允许", chatAllowed(cfgW, "毁灭菇翘嘴软饭群", true), false);
 eq("空白名单不限制群", chatAllowed({ autoReply: { whitelistChats: [] } }, "任意群", true), true);
+
+// 私聊串闲置更短（dmThreadTtlMin 默认 5 分钟），群聊串用 threadTtlMin
+{
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const tmpTtl = fs.mkdtempSync(path.join(os.tmpdir(), "wx-ttl-"));
+  const cfgTtl = { dataDir: tmpTtl, autoReply: { threadTtlMin: 10, dmThreadTtlMin: 5 } };
+  openThread(cfgTtl, "dm-chat", "dm");
+  eq("私聊串 6 分钟后已关", liveThread(cfgTtl, "dm-chat", Date.now() + 6 * 60000), null);
+  openThread(cfgTtl, "grp-chat", "mention");
+  eq("群串 6 分钟后还活着", Boolean(liveThread(cfgTtl, "grp-chat", Date.now() + 6 * 60000)), true);
+  fs.rmSync(tmpTtl, { recursive: true, force: true });
+}
 
 // 讨论串续命：只有「对着她说的」才延长
 eq("她自己说话续命", threadDirected([{ text: "我：在呢" }]), true);
