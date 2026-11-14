@@ -8,7 +8,7 @@ import * as core from "../lib/core.js";
 const { normalize, isNoise, diffNewText, classifyFresh, chatKeyOf, buildWakePrompt,
   mentionHit, mentionScopeText, wakeCooldownMs, wake, flushMentionBacklog,
   decideQuiet, settleLastWake, resetQuietState, pushEntry, keyedLines, lineKey, sameAnimationZone,
-  isUiNoise, multiOf, parseListRows, chooseCandidate, sameChatName, rememberLines } = __test;
+  isUiNoise, multiOf, parseListRows, chooseCandidate, sameChatName, rememberLines, threadDirected } = __test;
 const countsOfFor = (lines) => { const m = new Map(); for (const l of lines) m.set(l.key || l.text, (m.get(l.key || l.text) || 0) + 1); return m; };
 let failed = 0;
 
@@ -317,6 +317,15 @@ eq("识图描述归一2", lineKey({ text: "图片：猫，睁大眼睛，有滤�
 eq("昵称前缀剥掉", lineKey({ text: "昵称：@升天肥鱼在吗" }), "@升天肥鱼在吗");
 const imgPrev = countsOfFor(keyedLines([{ text: "图片：猫，睁大眼睛" }]));
 eq("换措辞的同一张图不算新", diffNewText(keyedLines([{ text: "图片：猫，睁大眼睛，有滤镜" }]), imgPrev), []);
+
+// 讨论串续命：只有「对着她说的」才延长
+eq("她自己说话续命", threadDirected([{ text: "我：在呢" }]), true);
+eq("引用回复她续命", threadDirected([{ text: "球球别抓我：引用：我 那句鱼话真逗" }]), true);
+eq("别人的闲聊不续命", threadDirected([
+  { text: "球球别抓我：今天吃啥" },
+  { text: "九星噩夜：随便" },
+]), false);
+eq("空屏不续命", threadDirected([]), false);
 
 // 跨会话隔离：换会话时必须清空上下文，别把上一个群的话带进这个群的讨论串
 rememberLines([{ text: "A群说的话", y: 100 }], Date.now(), "chatA");

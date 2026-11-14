@@ -18,7 +18,7 @@
     "probeSec": 4,
     "manageSpeakUp": true,
     "dryRun": false,
-    "threadMaxMin": 20
+    "threadMaxMin": 0
   },
   "ocr": {
     "engine": "rapidocr",
