@@ -354,6 +354,17 @@ eq("空白名单不限制群", chatAllowed({ autoReply: { whitelistChats: [] } }
   eq("同一条 @ 第一次算新的", isNewMention(chatA, line1, t0), true);
   eq("措辞抖动的同一条 @ 不再算", isNewMention(chatA, line2, t0 + 30000), false);
   eq("15 分钟后可以重新算", isNewMention(chatA, line2, t0 + 16 * 60000), true);
+  // 实测事故：@升天肥鱼被读成 @升大肥鱼，隔 3 分钟又把同一条 @ 当新的叫了一遍
+  const chatC = "群C@fp-" + Date.now();
+  eq("名字读歪的同一条 @ 不算新的", (() => {
+    isNewMention(chatC, { text: "@升天肥鱼分析下这张照片" }, t0);
+    return isNewMention(chatC, { text: "@升大肥鱼：分析下这张照片" }, t0 + 3 * 60000);
+  })(), false);
+  const chatD = "群D@fp-" + Date.now();
+  eq("真的换了话题的 @ 还算新的", (() => {
+    isNewMention(chatD, { text: "@升天肥鱼分析下这张照片" }, t0);
+    return isNewMention(chatD, { text: "@升天肥鱼刚才那事你怎么看" }, t0 + 3 * 60000);
+  })(), true);
   const chatB = "群B@fp-" + Date.now();
   eq("换个群照样算新的", isNewMention(chatB, line1, t0 + 60000), true);
   eq("指纹只看前 12 字", mentionFingerprint(chatB, line1).startsWith(chatB + "|"), true);
