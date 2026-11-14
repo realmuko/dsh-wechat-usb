@@ -54,6 +54,13 @@ eq("chatKey 空", chatKeyOf(""), "（未识别）");
   const seen = new Map();
   eq("首见的新行留下", classifyFresh([{ text: "在吗" }], { seen }).length, 1);
   eq("同 30 分钟内再出现不算新", classifyFresh([{ text: "在吗" }], { seen }).length, 0);
+  // 时间优先：我们发言的那一刻它就在屏幕上 → 它比我们的话还早，不该再回
+  const t0 = Date.now();
+  const preSend = new Map([["阿明：在吗", t0]]);
+  eq("发言前就在屏幕上的行不算新", classifyFresh([{ key: "阿明：在吗", text: "阿明：在吗" }],
+    { seen: new Map(), preSend, now: t0 + 60000 }).length, 0);
+  eq("发言之后新出现的行照常算新", classifyFresh([{ key: "阿明：那算了", text: "阿明：那算了" }],
+    { seen: new Map(), preSend, now: t0 + 60000 }).length, 1);
   eq("噪声行丢弃", classifyFresh([{ text: "凌晨12:22" }, { text: "发送" }], { seen: new Map() }).length, 0);
   eq("自己发的不算新", classifyFresh([{ text: "好的" }], { own: "好的", seen: new Map() }).length, 0);
   // 连着发几条：前面几条也要认出来（这是"自己回自己"的根因）
