@@ -618,6 +618,14 @@ const apiServer = startApi(getCfg, PLUGIN_ROOT, undefined, () => ctx, { reload: 
       }
       // 目标会话核对：多会话下"叫醒时的会话"和"现在屏幕上的会话"可能已经不是同一个了
       if (args.chat) {
+        // 快路径：轮询器最近 20 秒内确认过当前会话，直接用内存里的名字，
+        // 省掉一次截图 + 一次 OCR（实测 wechat_send 有 2 秒花在这上面）
+        const cached = poller.recentChatTitle(20);
+        if (cached && poller.chatNameMatches(args.chat, cached)) {
+          const g0 = core.guard(cfg, args.text);
+          if (args.dryRun) return { dryRun: true, ok: g0.ok, reasons: g0.reasons };
+          return core.sendText(cfg, args.text);
+        }
         const got = poller.currentChatTitle(cfg);
         if (got && !poller.chatNameMatches(args.chat, got)) {
           return {
