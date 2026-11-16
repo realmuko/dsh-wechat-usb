@@ -571,16 +571,14 @@ const apiServer = startApi(getCfg, PLUGIN_ROOT, undefined, () => ctx, { reload: 
     async execute(args) {
       // 已经在目标聊天里就别再「回首页 → 搜索 → 点进去」折腾一遍：
       // 那要三十多秒，还会把用户正看的界面顶掉。轮询器每轮都在采这一帧，标题是现成的。
-      try {
-        const st = poller.pollStatus(getCfg());
-        const cur = String(st.chatTitle || "").replace(/\s+/g, "");
-        const want = String(args.title || "").replace(/\s+/g, "");
-        if (cur && want && (cur.includes(want) || want.includes(cur))) {
-          const file = core.shot(getCfg(), `open-${String(args.title).replace(/[\\/:*?"<>|\s]+/g, "_").slice(0, 40)}`);
-          return { opened: true, title: st.chatTitle, screenshot: file };
-        }
-      } catch { /* 拿不到当前标题就走原流程 */ }
-      return core.openChat(getCfg(), args.title);
+      // core.openChat 会多带回一个 query（搜索用的前 10 个字）；工具的输出 schema 是封闭的，
+      // 多带字段会被宿主判成 invalid output（实测：value.query is not a declared property）。
+      // 打开后必须现场 OCR 核对标题：openChat 只负责走完搜索流程，不保证真的进去了。
+      const cfg = getCfg();
+      const r = core.openChat(cfg, args.title);
+      const got = poller.currentChatTitle(cfg);
+      const opened = Boolean(got) && poller.chatNameMatches(args.title, got);
+      return { opened, title: got || (r && r.title) || args.title, screenshot: (r && r.screenshot) || "" };
     },
   });
 
@@ -618,20 +616,14 @@ const apiServer = startApi(getCfg, PLUGIN_ROOT, undefined, () => ctx, { reload: 
       }
       // 目标会话核对：多会话下"叫醒时的会话"和"现在屏幕上的会话"可能已经不是同一个了
       if (args.chat) {
-        // 快路径：轮询器最近 20 秒内确认过当前会话，直接用内存里的名字，
-        // 省掉一次截图 + 一次 OCR（实测 wechat_send 有 2 秒花在这上面）
-        const cached = poller.recentChatTitle(20);
-        if (cached && poller.chatNameMatches(args.chat, cached)) {
-          const g0 = core.guard(cfg, args.text);
-          if (args.dryRun) return { dryRun: true, ok: g0.ok, reasons: g0.reasons };
-          return core.sendText(cfg, args.text);
-        }
+        // 不再用 20 秒标题缓存：页面可能已经漂走，缓存会让“目标核对”形同虚设。
+        // 每次发送前都现场 OCR 标题；读不到就返回哨兵，宁可拒发。
         const got = poller.currentChatTitle(cfg);
-        if (got && !poller.chatNameMatches(args.chat, got)) {
+        if (!poller.chatNameMatches(args.chat, got)) {
           return {
             sent: false,
             blocked: false,
-            reasons: [`当前停在「${got}」，不是「${args.chat}」：先 wechat_open("${args.chat}") 再发`],
+            reasons: [`当前停在「${got || "未知页面"}」，不是「${args.chat}」：先 wechat_open("${args.chat}") 再发`],
           };
         }
       }

@@ -9,7 +9,7 @@
 > **2.0 有什么不一样**：从「蹲一个群」变成「自己在列表里巡场」——扫未读、挑会话、进群看一眼再决定接不接，
 > 接就开一条讨论串。单会话模式原样保留 v0.3.1 的行为，可以随时切回去。
 > 完整说明见 [`docs/RELEASE-2.0.0.md`](docs/RELEASE-2.0.0.md)，架构与触发链路见 [`docs/architecture.md`](docs/architecture.md)、
-> [`docs/entry-flow.png`](docs/entry-flow.png)。
+> 全流程图 [`docs/full-flow.png`](docs/full-flow.png)（进入链路：[`docs/entry-flow.png`](docs/entry-flow.png)）。
 
 > 演示图（`assets/*.png`）是脚本生成的合成截图，不含任何真实聊天内容；重新生成见 `scripts/gen-demo-assets.py`。
 
@@ -104,7 +104,8 @@ cp wechat-usb.config.example.json wechat-usb.config.json   # Windows: copy
 
 ## 多会话调度（v2）
 
-> 设计文档：[`docs/wechat-multichat-design.md`](docs/wechat-multichat-design.md) · 架构图：[`docs/multichat-architecture.png`](docs/multichat-architecture.png)
+> 当前全流程：[`docs/architecture.md`](docs/architecture.md) · 全流程图：[`docs/full-flow.png`](docs/full-flow.png)
+> 历史设计草案：[`docs/wechat-multichat-design.md`](docs/wechat-multichat-design.md)（未落地时的文字，和实现有出入）
 
 v2 之前只盯 `autoReply.whitelistChats[0]` 一个群。v2 改成「模拟人看微信」：
 
@@ -256,8 +257,8 @@ plugin_manager set_bundle target="dsh-wechat-usb" enabled=true
 - **v2.0（开发中，已在 `2.0.0-dev`）**：多会话调度。平时停在聊天列表、按**未读数变化**发现新会话，进群确认后开讨论串；
   串活着就留在该会话不切走（**单窗口是硬约束**）。@ 不在可见区时才点「有人@我」并等滚动停。
 
-  实现见下面「多会话调度（v2）」；设计：[`docs/wechat-multichat-design.md`](docs/wechat-multichat-design.md) ·
-  架构图：[`docs/multichat-architecture.png`](docs/multichat-architecture.png)
+  实现见下面「多会话调度（v2）」；当前全流程：[`docs/architecture.md`](docs/architecture.md) ·
+  全流程图：[`docs/full-flow.png`](docs/full-flow.png)
 
   > 单会话基线已打标签 `v0.3.1`，随时可以 `git checkout v0.3.1` 回滚。
 
