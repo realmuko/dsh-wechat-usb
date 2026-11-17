@@ -94,7 +94,7 @@ assert.ok(linkPrompt.includes("wechat_reply_pending"));
 const plainPrompt = formatPendingPrompt(item);
 assert.ok(!plainPrompt.includes("wechat_read_link"), "没有链接时不要多加噪音");
 assert.ok(linkPrompt.includes("stickerMood"), "要告诉模型可以发表情");
-assert.ok(linkPrompt.includes("开心"), "表情情绪要列出来");
+assert.ok(linkPrompt.includes("wechat_stickers"), "要让模型先看表情库里有哪些情绪");
 
 console.log("bridge fallback ok");
 
@@ -133,3 +133,18 @@ assert.equal(JSON.parse(sayCall.init.body).chat, "阿杰");
 assert.equal(JSON.parse(sayCall.init.body).text, "好久没聊了");
 
 console.log("bridge say ok");
+
+// ---------- 表情库概况 ----------
+const calls3 = [];
+const fetchImpl3 = async (url) => {
+  calls3.push(url);
+  if (String(url).endsWith("/stickers")) {
+    return { status: 200, async text() { return JSON.stringify({ ok: true, total: 5, moods: { 无语: 3, 开心: 2 } }); } };
+  }
+  return { status: 404, async text() { return "{}"; } };
+};
+const b3 = new PendingBridge({ baseUrl: "http://engine", sessionId: "s", schedule, fetchImpl: fetchImpl3 });
+const lib = await b3.stickers();
+assert.equal(lib.total, 5);
+assert.equal(lib.moods["无语"], 3);
+console.log("bridge stickers ok");

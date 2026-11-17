@@ -554,6 +554,27 @@ const apiServer = startApi(getCfg, PLUGIN_ROOT, undefined, () => ctx, { reload: 
   });
 
   registerTool(ctx, {
+    name: "wechat_stickers",
+    description: "看看表情库里现在有哪些情绪、各几张（发表情前先看这个，别凭想象挑情绪）。",
+    parameters: { type: "object", properties: {} },
+    output: {
+      schema: { type: "object", additionalProperties: true },
+      render: (_a, v) =>
+        text(
+          `共 ${v.total ?? 0} 张：` +
+            Object.entries(v.moods ?? {})
+              .map(([k, n]) => `${k} ${n}`)
+              .join("、"),
+        ),
+    },
+    isConcurrencySafe: () => true,
+    async execute() {
+      if (!bridge) throw new Error("交接桥接没启用");
+      return bridge.stickers();
+    },
+  });
+
+  registerTool(ctx, {
     name: "wechat_say",
     description:
       "主动搭话专用：给某个会话发一句话或一个表情。引擎会按安静时段、每小时/每天上限、群聊开关拒绝；被拒绝就说明原因，别硬发。",
