@@ -488,10 +488,10 @@ const apiServer = startApi(getCfg, PLUGIN_ROOT, undefined, () => ctx, { reload: 
       type: "object",
       properties: {
         id: { type: "string", description: "待办 id" },
-        text: { type: "string", description: "要发出的那句话（与 stickerMood 二选一）" },
+        text: { type: "string", description: "要发出的那句话（可以不给，只发表情）" },
         stickerMood: {
           type: "string",
-          description: "发表情时用：开心/无语/敷衍/惊讶/亲昵/嘲讽/委屈（与 text 二选一）",
+          description: "想补一个表情时给：开心/无语/敷衍/惊讶/亲昵/嘲讽/委屈（可与 text 同时给，先文字后表情）",
         },
       },
       required: ["id"],
@@ -582,7 +582,7 @@ const apiServer = startApi(getCfg, PLUGIN_ROOT, undefined, () => ctx, { reload: 
       type: "object",
       properties: {
         chat: { type: "string", description: "会话标题（先用 wechat_chats 看有哪些）" },
-        text: { type: "string", description: "要发的那句话（与 stickerMood 二选一）" },
+        text: { type: "string", description: "要发的那句话（可以不给，只发表情）" },
         stickerMood: { type: "string", description: "发表情时用：开心/无语/敷衍/惊讶/亲昵/嘲讽/委屈" },
       },
       required: ["chat"],

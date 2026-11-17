@@ -148,3 +148,17 @@ const lib = await b3.stickers();
 assert.equal(lib.total, 5);
 assert.equal(lib.moods["无语"], 3);
 console.log("bridge stickers ok");
+
+// ---------- 回复同时带文字和表情 ----------
+const calls4 = [];
+const fetchImpl4 = async (url, init) => {
+  calls4.push({ url, init });
+  return { status: 200, async text() { return JSON.stringify({ ok: true, chat: "阿杰", text: "笑死" }); } };
+};
+const b4 = new PendingBridge({ baseUrl: "http://engine", sessionId: "s", schedule, fetchImpl: fetchImpl4 });
+await b4.reply("id-1", "笑死", "无语");
+const replyCall4 = calls4.find((c) => String(c.url).endsWith("/pending/reply"));
+const body4 = JSON.parse(replyCall4.init.body);
+assert.equal(body4.text, "笑死");
+assert.equal(body4.stickerMood, "无语", "文字和表情要一起给引擎");
+console.log("bridge text+sticker ok");
