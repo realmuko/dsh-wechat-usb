@@ -77,3 +77,23 @@ const noSid = new PendingBridge({ baseUrl: "http://engine", schedule, fetchImpl 
 await assert.rejects(() => noSid.wake(item), /sessionId/);
 
 console.log("bridge selftest ok");
+
+// ---------- 链接与表情 ----------
+const linkItem = {
+  id: "link-1",
+  chat: "阿杰",
+  kind: "dm",
+  messages: [
+    { from: "other", text: "[链接] 你，想家了吗？ · 人民网" },
+  ],
+};
+const linkPrompt = formatPendingPrompt(linkItem);
+assert.ok(linkPrompt.includes("wechat_read_link"), "有链接时要告诉模型能读");
+assert.ok(linkPrompt.includes('"chat":"阿杰"'), "读链接要带会话名");
+assert.ok(linkPrompt.includes("wechat_reply_pending"));
+const plainPrompt = formatPendingPrompt(item);
+assert.ok(!plainPrompt.includes("wechat_read_link"), "没有链接时不要多加噪音");
+assert.ok(linkPrompt.includes("stickerMood"), "要告诉模型可以发表情");
+assert.ok(linkPrompt.includes("开心"), "表情情绪要列出来");
+
+console.log("bridge fallback ok");
