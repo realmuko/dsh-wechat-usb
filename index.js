@@ -36,9 +36,30 @@ function lossless(value) {
   return undefined;
 }
 
+// 桥接开启时，这些工具会绕过引擎去碰手机，必须拒绝（单写者纪律）
+const DEVICE_TOOLS = new Set(["wechat_send", "wechat_open", "wechat_shot", "wechat_watch", "wechat_poll_start", "wechat_poll_stop"]);
+
+function bridgeOwnsDevice() {
+  try {
+    return Boolean(core.loadConfig().bridge?.enabled);
+  } catch {
+    return false;
+  }
+}
+
 function registerTool(ctx, definition) {
   const run = definition.execute;
-  const tool = { ...definition, async execute(args, exec) { return lossless(await run(args, exec)); } };
+  const tool = {
+    ...definition,
+    async execute(args, exec) {
+      if (DEVICE_TOOLS.has(definition.name) && bridgeOwnsDevice()) {
+        throw new Error(
+          `手机由引擎独占（3.0 交接模式）：不要调用 ${definition.name}。要回话请用 wechat_reply_pending({id,text})，不回就用 wechat_skip_pending({id})。`,
+        );
+      }
+      return lossless(await run(args, exec));
+    },
+  };
   ctx.effect(() => ctx.tools.register(tool), `dsh-wechat-usb: ${definition.name}`);
 }
 
