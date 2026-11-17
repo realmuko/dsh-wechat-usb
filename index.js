@@ -488,9 +488,13 @@ const apiServer = startApi(getCfg, PLUGIN_ROOT, undefined, () => ctx, { reload: 
       type: "object",
       properties: {
         id: { type: "string", description: "待办 id" },
-        text: { type: "string", description: "要发出的那句话" },
+        text: { type: "string", description: "要发出的那句话（与 stickerMood 二选一）" },
+        stickerMood: {
+          type: "string",
+          description: "发表情时用：开心/无语/敷衍/惊讶/亲昵/嘲讽/委屈（与 text 二选一）",
+        },
       },
-      required: ["id", "text"],
+      required: ["id"],
     },
     output: {
       schema: { type: "object", additionalProperties: true },
@@ -499,7 +503,31 @@ const apiServer = startApi(getCfg, PLUGIN_ROOT, undefined, () => ctx, { reload: 
     isConcurrencySafe: () => false,
     async execute(args) {
       if (!bridge) throw new Error("交接桥接没启用（检查 wechat-usb.config.json 的 bridge.enabled / sessionId）");
-      return bridge.reply(String(args.id), String(args.text));
+      if (!args.text && !args.stickerMood) throw new Error("text 和 stickerMood 至少给一个");
+      return bridge.reply(String(args.id), args.text ? String(args.text) : "", args.stickerMood ? String(args.stickerMood) : undefined);
+    },
+  });
+
+  registerTool(ctx, {
+    name: "wechat_read_link",
+    description:
+      "让引擎打开会话里的链接/文章，读回标题与正文（AI摘要优先）。消息里是链接、页面看不懂时先调它。会占用手机几十秒。",
+    parameters: {
+      type: "object",
+      properties: {
+        chat: { type: "string", description: "会话标题" },
+        which: { type: "integer", description: "第几张卡片（不填=最后一张）" },
+      },
+      required: ["chat"],
+    },
+    output: {
+      schema: { type: "object", additionalProperties: true },
+      render: (_a, v) => text((v.text ?? v.error ?? "").slice(0, 4000)),
+    },
+    isConcurrencySafe: () => false,
+    async execute(args) {
+      if (!bridge) throw new Error("交接桥接没启用");
+      return bridge.readLink(String(args.chat), args.which ? Number(args.which) : undefined);
     },
   });
 
