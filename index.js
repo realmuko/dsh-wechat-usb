@@ -232,6 +232,37 @@ const apiServer = startApi(getCfg, PLUGIN_ROOT, undefined, () => ctx, { reload: 
         });
         bridge.start();
         ctx.effect(() => () => bridge && bridge.stop(), "dsh-wechat-usb: pending bridge");
+
+        // 会话轮换：上下文攒到阈值就换一个新会话（同工作区，鱼的记忆在工作区模式下共用一份）
+        if (cfg.rotation && cfg.rotation.enabled) {
+          const log = (m) => {
+            try {
+              appendFileSync(path.join(PLUGIN_ROOT, "data", "bridge.log"), `${new Date().toISOString()} ${m}\n`);
+            } catch { /* ignore */ }
+          };
+          const check = async () => {
+            try {
+              if (!bridge) return;
+              const pending = await bridge.fetchPending().catch(() => []);
+              if (Array.isArray(pending) && pending.length > 0) return; // 有待办等着回，先不换
+              const r = await rotation.maybeRotate(ctx, getCfg());
+              if (r.ok) {
+                bridge.setSessionId(r.to);
+                log(`会话轮换 ${r.from} -> ${r.to}｜${r.reason}｜记忆=${r.memory}`);
+              } else if (r.skipped && !["disabled", "under-threshold", "cooldown", "too-young"].includes(r.skipped)) {
+                log(`轮换跳过：${r.skipped}${r.error ? " · " + r.error : ""}`);
+              }
+            } catch (err) {
+              log(`轮换出错：${err.message}`);
+            }
+          };
+          const timer = setInterval(check, 5 * 60 * 1000);
+          const first = setTimeout(check, 90 * 1000);
+          ctx.effect(() => () => {
+            clearInterval(timer);
+            clearTimeout(first);
+          }, "dsh-wechat-usb: rotation");
+        }
       } catch (err) {
         bridge = null;
         console.error(`[wechat-usb] bridge 启动失败：${err.message}`);

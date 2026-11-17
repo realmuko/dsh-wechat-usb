@@ -62,3 +62,20 @@ schedule.create 叫醒会话，prompt 里带会话名 + 最近 8 条 + 待办 id
 
 - 配置里 `bridge.enabled=false` + 重启插件即可；旧 poller 的逻辑一行没删，随时可以开回去。
 - 分支 `v3`，`main` 保持 2.x。
+## 会话轮换（2026-11-17 补）
+
+上下文攒到阈值就换一个新会话，避免一个会话越聊越慢、越聊越贵。
+
+- 触发：`lib/rotation.js` 按**轮数 / 文件体积**判断（默认 300 轮或 8MB，且会话至少活了 60 分钟、两次轮换间隔 ≥30 分钟）；
+- 换法：`sessionController.create({ cwd })` 在**同一个工作区**建新会话；
+- 记忆：鱼的记忆（fish-memory）开的是**工作区模式**（`~/.dsh/fish-memory-config.json` 的 `模式: "workspace"`），
+  同一工作区共用一个记忆库，新会话天然接上，**不需要复制记忆文件**；只有「按会话」模式才会复制；
+- 切绑定：轮换后插件把 `bridge.sessionId` 写到配置里，并**原地调用 `bridge.setSessionId()`**（不用重载插件）；
+  同时把「主动搭话」的目标会话换到新会话；
+- 保护：待办队列非空时不轮换（有人在等主模型回复）；每次轮换写 `data/bridge.log` 和 `data/rotation.log`。
+
+配置（`wechat-usb.config.json`）：
+
+```json
+"rotation": { "enabled": true, "maxTurns": 300, "maxSizeMB": 8, "minAgeMin": 60, "cooldownMin": 30 }
+```

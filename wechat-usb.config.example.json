@@ -104,9 +104,9 @@
     "enterBySearch": true
   },
   "rotation": {
-    "enabled": false,
+    "enabled": true,
     "maxTurns": 300,
-    "maxSizeMB": 12,
+    "maxSizeMB": 8,
     "minAgeMin": 60,
     "cooldownMin": 30,
     "switchSpeakUp": true,
