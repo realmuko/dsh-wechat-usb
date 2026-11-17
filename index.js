@@ -10,6 +10,7 @@ let poller = await import("./lib/poller.js");
 import { listSessions } from "./lib/sessions.js";
 import { startApi } from "./lib/api.js";
 import * as rotation from "./lib/rotation.js";
+import { PendingBridge } from "./lib/bridge.js";
 
 const PLUGIN_ROOT = fileURLToPath(new URL(".", import.meta.url));
 
@@ -182,6 +183,7 @@ const apiServer = startApi(getCfg, PLUGIN_ROOT, undefined, () => ctx, { reload: 
 
   // schedule 服务只保存在模块作用域里（不再写 globalThis），旧实例拿不到就不会重复唤醒。
   let scheduleRef = null;
+  let bridge = null;
   ctx.inject(["schedule"], (sctx) => {
     try {
       scheduleRef = sctx.schedule || sctx.get?.("schedule") || null;
@@ -189,6 +191,30 @@ const apiServer = startApi(getCfg, PLUGIN_ROOT, undefined, () => ctx, { reload: 
     } catch {
       scheduleRef = null;
       poller.setSchedule(null);
+    }
+
+    // 3.0 桥接：引擎发现「该回了」，这边叫醒会话让主模型写话
+    const cfg = getCfg();
+    const b = cfg.bridge || {};
+    if (b.enabled && b.sessionId && scheduleRef) {
+      try {
+        bridge = new PendingBridge({
+          baseUrl: b.engineUrl || "http://127.0.0.1:65480",
+          sessionId: b.sessionId,
+          schedule: scheduleRef,
+          intervalMs: Number(b.intervalMs) || 8000,
+          log: (m) => {
+            try {
+              appendFileSync(path.join(PLUGIN_ROOT, "data", "bridge.log"), `${new Date().toISOString()} ${m}\n`);
+            } catch { /* ignore */ }
+          },
+        });
+        bridge.start();
+        ctx.effect(() => () => bridge && bridge.stop(), "dsh-wechat-usb: pending bridge");
+      } catch (err) {
+        bridge = null;
+        console.error(`[wechat-usb] bridge 启动失败：${err.message}`);
+      }
     }
   });
 
@@ -429,6 +455,52 @@ const apiServer = startApi(getCfg, PLUGIN_ROOT, undefined, () => ctx, { reload: 
     isConcurrencySafe: () => true,
     async execute() {
       return core.status(getCfg());
+    },
+  });
+
+  /* ---- 3.0 交接：主模型写话，引擎执行 ---- */
+  registerTool(ctx, {
+    name: "wechat_reply_pending",
+    description:
+      "把你要发的一句话交给引擎发出。只在收到「微信消息」唤醒时用：id 用提示词里给的那个，text 是你要发出去的原话（≤60 字，不要加引号）。",
+    parameters: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "待办 id" },
+        text: { type: "string", description: "要发出的那句话" },
+      },
+      required: ["id", "text"],
+    },
+    output: {
+      schema: { type: "object", additionalProperties: true },
+      render: (_a, v) => text(`已发到「${v.chat}」：${v.text}`),
+    },
+    isConcurrencySafe: () => false,
+    async execute(args) {
+      if (!bridge) throw new Error("交接桥接没启用（检查 wechat-usb.config.json 的 bridge.enabled / sessionId）");
+      return bridge.reply(String(args.id), String(args.text));
+    },
+  });
+
+  registerTool(ctx, {
+    name: "wechat_skip_pending",
+    description: "这条消息不接（闲聊/不该你说/没把握）。理由会写进引擎事件，方便以后调策略。",
+    parameters: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "待办 id" },
+        reason: { type: "string", description: "为什么不接" },
+      },
+      required: ["id"],
+    },
+    output: {
+      schema: { type: "object", additionalProperties: true },
+      render: (_a, v) => text(v.ok ? "已跳过" : `跳过失败：${v.error ?? ""}`),
+    },
+    isConcurrencySafe: () => true,
+    async execute(args) {
+      if (!bridge) throw new Error("交接桥接没启用");
+      return bridge.skip(String(args.id), String(args.reason || ""));
     },
   });
 

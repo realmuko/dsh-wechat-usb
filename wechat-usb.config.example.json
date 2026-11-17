@@ -111,5 +111,11 @@
     "cooldownMin": 30,
     "switchSpeakUp": true,
     "switchWake": true
+  },
+  "bridge": {
+    "enabled": false,
+    "engineUrl": "http://127.0.0.1:65480",
+    "sessionId": "",
+    "intervalMs": 8000
   }
 }
