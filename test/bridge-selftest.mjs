@@ -97,3 +97,39 @@ assert.ok(linkPrompt.includes("stickerMood"), "要告诉模型可以发表情");
 assert.ok(linkPrompt.includes("开心"), "表情情绪要列出来");
 
 console.log("bridge fallback ok");
+
+// ---------- 主动搭话：/say 与 /state ----------
+const calls2 = [];
+const fetchImpl2 = async (url, init) => {
+  calls2.push({ url, init });
+  if (url.endsWith("/state")) {
+    return {
+      status: 200,
+      async text() {
+        return JSON.stringify({
+          world: {
+            chats: {
+              a: { name: "阿杰", kind: "dm", lastText: "在吗", lastFrom: "other", lastSeenAt: 200 },
+              b: { name: "某个群", kind: "group", lastText: "哈哈", lastFrom: "other", lastSeenAt: 100 },
+            },
+          },
+        });
+      },
+    };
+  }
+  if (url.endsWith("/say")) {
+    return { status: 200, async text() { return JSON.stringify({ ok: true, chat: "阿杰", text: "好久没聊了" }); } };
+  }
+  return { status: 404, async text() { return "{}"; } };
+};
+const b2 = new PendingBridge({ baseUrl: "http://engine", sessionId: "s", schedule, fetchImpl: fetchImpl2 });
+const chats = await b2.chats();
+assert.equal(chats.length, 2);
+assert.equal(chats[0].name, "阿杰", "按最近活动排序");
+const said = await b2.say("阿杰", { text: "好久没聊了" });
+assert.equal(said.ok, true);
+const sayCall = calls2.find((c) => String(c.url).endsWith("/say"));
+assert.equal(JSON.parse(sayCall.init.body).chat, "阿杰");
+assert.equal(JSON.parse(sayCall.init.body).text, "好久没聊了");
+
+console.log("bridge say ok");

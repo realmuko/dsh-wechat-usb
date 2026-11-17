@@ -532,6 +532,56 @@ const apiServer = startApi(getCfg, PLUGIN_ROOT, undefined, () => ctx, { reload: 
   });
 
   registerTool(ctx, {
+    name: "wechat_chats",
+    description:
+      "看看最近聊过谁（主动搭话前用它挑会话）：返回会话名、群聊/私聊、最后一条消息和时间。",
+    parameters: { type: "object", properties: { limit: { type: "integer", description: "最多几条（默认 8）" } } },
+    output: {
+      schema: { type: "object", additionalProperties: true },
+      render: (_a, v) =>
+        text(
+          Array.isArray(v?.chats)
+            ? v.chats.map((c) => `${c.name}（${c.kind === "group" ? "群" : "私聊"}）${c.lastText ? "：" + c.lastText : ""}`).join("\n")
+            : String(v),
+        ),
+    },
+    isConcurrencySafe: () => true,
+    async execute(args) {
+      if (!bridge) throw new Error("交接桥接没启用");
+      const chats = await bridge.chats(args.limit ? Number(args.limit) : undefined);
+      return { ok: true, chats };
+    },
+  });
+
+  registerTool(ctx, {
+    name: "wechat_say",
+    description:
+      "主动搭话专用：给某个会话发一句话或一个表情。引擎会按安静时段、每小时/每天上限、群聊开关拒绝；被拒绝就说明原因，别硬发。",
+    parameters: {
+      type: "object",
+      properties: {
+        chat: { type: "string", description: "会话标题（先用 wechat_chats 看有哪些）" },
+        text: { type: "string", description: "要发的那句话（与 stickerMood 二选一）" },
+        stickerMood: { type: "string", description: "发表情时用：开心/无语/敷衍/惊讶/亲昵/嘲讽/委屈" },
+      },
+      required: ["chat"],
+    },
+    output: {
+      schema: { type: "object", additionalProperties: true },
+      render: (_a, v) => text(v.ok ? `已发到「${v.chat}」：${v.text}` : `没发出去：${v.error ?? ""}`),
+    },
+    isConcurrencySafe: () => false,
+    async execute(args) {
+      if (!bridge) throw new Error("交接桥接没启用");
+      if (!args.text && !args.stickerMood) throw new Error("text 和 stickerMood 至少给一个");
+      return bridge.say(String(args.chat), {
+        text: args.text ? String(args.text) : undefined,
+        stickerMood: args.stickerMood ? String(args.stickerMood) : undefined,
+      });
+    },
+  });
+
+  registerTool(ctx, {
     name: "wechat_skip_pending",
     description: "这条消息不接（闲聊/不该你说/没把握）。理由会写进引擎事件，方便以后调策略。",
     parameters: {
