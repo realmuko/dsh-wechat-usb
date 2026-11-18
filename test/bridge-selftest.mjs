@@ -162,3 +162,38 @@ const body4 = JSON.parse(replyCall4.init.body);
 assert.equal(body4.text, "笑死");
 assert.equal(body4.stickerMood, "无语", "文字和表情要一起给引擎");
 console.log("bridge text+sticker ok");
+
+// ---------- 回归：卡死的轮询要能自己复位（2026-11-18 桥接静默死掉那次） ----------
+{
+  // A. schedule.create 永久挂住：wake 必须超时抛错，不能把整轮轮询拖死
+  const never = { async create() { return new Promise(() => {}); } };
+  const bTimeout = new PendingBridge({
+    baseUrl: "http://engine",
+    sessionId: "s",
+    schedule: never,
+    fetchImpl,
+    wakeTimeoutMs: 60,
+  });
+  await assert.rejects(() => bTimeout.wake(item), /叫醒超时/, "create 挂住时要超时报错而不是永远等");
+  console.log("bridge wake-timeout ok");
+}
+
+{
+  // B. 整轮 pollOnce 卡住（连 fetch 都挂着）：看门狗要复位 #busy 并记日志
+  const logs = [];
+  const hang = () => new Promise(() => {});
+  const bStall = new PendingBridge({
+    baseUrl: "http://engine",
+    sessionId: "s",
+    schedule: { async create() { return { ok: true }; } },
+    fetchImpl: async () => hang(),
+    intervalMs: 20,
+    stallMs: 80,
+    log: (m) => logs.push(m),
+  });
+  bStall.start();
+  await new Promise((r) => setTimeout(r, 300));
+  bStall.stop();
+  assert.ok(logs.some((m) => m.includes("看门狗")), `卡死的轮询要触发看门狗，实际日志：${logs.join(" | ")}`);
+  console.log("bridge watchdog ok");
+}
