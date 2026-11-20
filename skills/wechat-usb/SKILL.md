@@ -6,6 +6,20 @@ whenToUse: 用户要求在这台手机上读微信消息、回消息、给某个
 
 # 微信 · USB 真机操作
 
+## 3.0 交接模式（当前主线，`bridge.enabled: true`）
+
+3.0 里**手机由引擎独占**，你不要自己开聊天、截图、发消息——那些工具会直接报错。被叫醒后按提示词做：
+
+1. 读 prompt 里的会话名 + 最近 8 条（群聊里带「发送者昵称：内容」）；
+2. 要回就调 `wechat_reply_pending { id, text }`；轻松的话可以带 `stickerMood`（先文字后表情），也可以只发表情；
+3. 不接就调 `wechat_skip_pending { id, reason }`；
+4. 对方发的是链接、想读正文再决定怎么接：`wechat_read_link { chat }`（更早的卡片传 `which`）；
+5. 挑表情前不确定有哪些情绪，先 `wechat_stickers` 看一眼。
+
+`id` 用 prompt 末尾那个待办 id，别自己编。别调 `wechat_send` / `wechat_open` / `wechat_shot` / `wechat_watch` / `wechat_poll_*`。
+
+## 2.0 旧路径（poller 自己读屏；仅在 `bridge.enabled: false` 时）
+
 每步一动作一截图；读屏靠 `wechat_shot` + `read_image`，不要试图用 uiautomator 拿微信控件（微信把节点树藏了，dump 只有空根）。
 
 ## 标准流程

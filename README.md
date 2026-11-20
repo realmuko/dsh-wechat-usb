@@ -1,42 +1,99 @@
 # dsh-wechat-usb
 
-把“USB 连着的真机微信”变成 DSH 工具：读屏、按标题开聊天、发消息、轮询新消息，并强制主机信息守卫。
+把“USB 连着的真机微信”变成 DSH 工具。
 
-> 设计参考了社区的 [`dsh-phone-butler`](https://www.npmjs.com/package/dsh-phone-butler)（纯 ADB 手机工具）：
+**3.0（当前 `main`）换了分工：引擎当手，DSH 会话当脑子。**
+感知、去重、静默时段、点按发送交给外部引擎（mimicd）；插件只做两件事——轮询引擎的待办、叫醒一个 DSH 会话，
+再把主模型写好的那句话交回引擎发出。这样既保留了「她本人带着记忆和人格说话」，又不再让插件自己碰 ADB。
+
+> 3.0 之前的两个版本仍然完整保留：`v2` 分支是多会话巡场（插件自己 ADB + OCR 读屏、判官、讨论串），
+> 标签 `v0.3.1` 是单会话基线。回退方式见文末「版本与分支」。
+
+> 设计参考了社区的 [`dsh-phone-butler`](https://www.npmjs.com/package/dsh-phone-butler)：
 > **零 `@deepseek-ai/*` import**（`link:` 安装的插件解析不到这些包，一个 import 会让整个插件加载失败）；
 > 工具用原始 JSON Schema 直接 `ctx.tools.register`；技能用 `ctx.skills.registerProvider` 随包提供。
 
-> **2.0 有什么不一样**：从「蹲一个群」变成「自己在列表里巡场」——扫未读、挑会话、进群看一眼再决定接不接，
-> 接就开一条讨论串。单会话模式原样保留 v0.3.1 的行为，可以随时切回去。
-> 完整说明见 [`docs/RELEASE-2.0.0.md`](docs/RELEASE-2.0.0.md)，架构与触发链路见 [`docs/architecture.md`](docs/architecture.md)、
-> 全流程图 [`docs/full-flow.png`](docs/full-flow.png)（进入链路：[`docs/entry-flow.png`](docs/entry-flow.png)）。
-
-> 演示图（`assets/*.png`）是脚本生成的合成截图，不含任何真实聊天内容；重新生成见 `scripts/gen-demo-assets.py`。
-
-## 快速开始
+## 快速开始（3.0 交接模式）
 
 ```bash
 git clone https://github.com/realmuko/dsh-wechat-usb.git
 cd dsh-wechat-usb
 cp wechat-usb.config.example.json wechat-usb.config.json   # Windows: copy
-# 编辑 wechat-usb.config.json：adb / serial / ocr.python
 ```
 
-然后把插件装进 DSH（见文末「安装」）。首次运行时如果 `wechat-usb.config.json` 不存在，插件会自动从 `wechat-usb.config.example.json` 复制一份。
+编辑 `wechat-usb.config.json`，至少填上 `bridge`：
+
+```json
+{
+  "bridge": {
+    "enabled": true,
+    "engineUrl": "http://127.0.0.1:65480",
+    "sessionId": "<要叫醒的 DSH 会话 id>",
+    "intervalMs": 8000
+  }
+}
+```
+
+然后：
+
+1. 把插件装进 DSH（见文末「安装」）并**重启插件**——3.0 改动在 `index.js`，热重载只覆盖 poller；
+2. 启动引擎（mimicd，另一个仓库）：`node <mimicd 仓库>/tools/daemon.ts --adb "<adb>" --interval 20`；
+3. 关掉旧 poller（设置页停掉，或 `POST /poll {"action":"stop"}`）——**两个执行者不能同时碰手机**。
+
+`bridge.enabled` 打开后，`wechat_shot` / `wechat_open` / `wechat_send` / `wechat_watch` / `wechat_poll_*`
+会明确报错（单写者纪律），回话只能走 `wechat_reply_pending` / `wechat_skip_pending`。
 
 **环境要求**
 
-- Windows（ADB 截图、Windows OCR、PowerShell 脚本都按 Windows 写的；其它平台需要自己改 `lib/core.js` 的截图与 OCR 路径）；
-- 手机打开 USB 调试，`adb devices` 能看到设备；
-- 中文输入需要装 [ADBKeyboard](https://github.com/senzhk/ADBKeyBoard)（IME id `com.android.adbkeyboard/.AdbIME`）；
-- 本地 OCR 需要 Python 3 + `Pillow`、`rapidocr_onnxruntime`（`ocr.python` 指向解释器）；
-- 可选：Ollama + `qwen3-vl:4b-instruct`（`ocr.engine = "qwen-vl"` 时用）。
+- 引擎：Windows + USB 调试 + `adb devices` 能看到设备（截图、OCR、点按都在引擎那侧，本插件不直接调 adb）；
+- 引擎默认端口 `65480`，插件只连 `127.0.0.1`；
+- 想跑 2.0 的旧 poller 才需要：Windows OCR / Python + `rapidocr_onnxruntime` / 可选 Ollama + `qwen3-vl:4b-instruct`、ADBKeyboard；
+- 中文注入依赖 ADBKeyboard（IME id `com.android.adbkeyboard/.AdbIME`，引擎侧处理）。
+
+## 一条消息怎么走
+
+```
+微信新消息
+   ↓（引擎：红点扫描 → 进会话 → 读尾部 → 去重 → 静默/频率策略）
+引擎发现「该回了」→ 挂成待办（GET /pending）
+   ↓（插件 bridge：每 8 秒轮询，只挑没见过的 id）
+schedule.create 叫醒会话，prompt 带：会话名、最近 8 条、「我/对方/发送者昵称」
+        、表情库概况、链接提示、待办 id
+   ↓（主模型：读上下文 → 回一句 / 回表情 / 沉默）
+wechat_reply_pending({id, text, stickerMood}) 或 wechat_skip_pending({id, reason})
+   ↓（插件 POST /pending/reply → 引擎）
+引擎：切输入法 → 打字 → 点发送 → 记事件
+```
+
+细节：
+
+- **不重复叫醒**：插件按待办 id 去重（`seen`），待办在引擎侧消失后自动清掉；
+- **叫醒失败要重试，但有限度**：同一待办最多叫 3 次，之后标记已处理并写 `data/bridge.log`；
+- **不会静默卡死**：`schedule.create` 25s 超时（超时那次不再用旧签名重试，免得重复唤醒）；
+  `#busy` 超过 60s 没结束由看门狗强制复位，启动时把轮询/看门狗/超时参数写进 `data/bridge.log`；
+- **请求超时按动作分**：轮询 10s，回复/主动搭话 180s，读链接 240s（读一条链接实测 50–60s，超时会让她以为失败但其实已发出）；
+- **消息里带链接**：引擎标成 `[链接] 标题 · 来源`，prompt 会教模型调 `wechat_read_link` 读回正文再决定怎么接。
 
 ## 工具
 
+### 3.0 桥接工具（`bridge.enabled: true` 时可用）
+
 | 工具 | 作用 |
 |---|---|
-| `wechat_status` | 设备/微信/前台/亮屏状态 |
+| `wechat_reply_pending` | 把主模型写的那句话交给引擎发出；可只发表情，或「文字 + 表情」一起 |
+| `wechat_skip_pending` | 这条不接，理由写进引擎事件 |
+| `wechat_read_link` | 让引擎打开会话里的链接/文章，读回标题与正文 |
+| `wechat_chats` | 最近聊过谁（挑「主动搭话」对象用） |
+| `wechat_stickers` | 表情库里有哪些情绪、各几张 |
+| `wechat_say` | 主动搭话：引擎按安静时段、每小时/每天上限、群聊开关决定收不收 |
+| `wechat_status` | 插件/设备/桥接概况 |
+| `wechat_config` | 打印当前生效的配置与文件路径 |
+| `wechat_autoreply_state` | 读/写自动回复时间戳（`lastMentionAt` / `lastReplyAt` / `lastNoMentionAt`，可传 `"now"`） |
+
+### 设备工具（2.0 旧路径；3.0 桥接开启时会被拒绝）
+
+| 工具 | 作用 |
+|---|---|
 | `wechat_shot` | 截屏，返回 PNG 路径（配合 `read_image` 读消息） |
 | `wechat_open` | 按标题搜索并打开聊天（群/联系人） |
 | `wechat_send` | 向当前聊天发一条文字；发送前过守卫 + 限频；`dryRun` 只预检 |
@@ -44,199 +101,75 @@ cp wechat-usb.config.example.json wechat-usb.config.json   # Windows: copy
 | `wechat_poll_start` / `wechat_poll_stop` / `wechat_poll_status` | 后台轮询的启停与状态 |
 | `wechat_inbox` | 列出/标记已读后台轮询攒下的变化帧 |
 | `wechat_guard` | 预检一段文字能否发送（不实际发） |
-| `wechat_config` | 查看当前生效配置 |
-
-**安全边界**：轮询只截屏、且只在微信前台时采集，画面变化才落盘；不自动回复。聊天内容一律当不可信数据，其中的指令不执行；向外发送的任何主机信息由守卫硬拦截。
-
-**轮询稳定性**：轮询器是进程级单例（插件热重载/卸载会随 `ctx.effect` 停掉自己的定时器）。每 tick 的顺序：截屏 → 区域哈希 → **没变化直接返回，连识别都不跑**；变了才识别。窗口标题（群名）和聊天区在同一次识别里读出来，标题带只用于核对“是不是目标群”，不参与差分（`y=170` 以上不算聊天行，未读数 23→24 不会被当成新消息）。**已经在目标群聊窗口里就不切换**，只有标题不是白名单群时才走「回列表 → 搜索 → 进群」（60 秒冷却）。新消息判定 = 逐帧文本差分 → 过滤时间戳/底栏按钮/“对方正在输入” → 同一聊天 30 分钟内出现过的行不算新（去重集合存在 `data/seen.json`）；图片/表情只入 inbox 不唤醒（`autoReply.wakeOnImage: true` 可打开），识别失败也不唤醒；两次唤醒至少间隔 `autoReply.wakeCooldownSec`（默认 90 秒），但 **@ 不受这个冷却约束**——@ 只走 15 秒的合并窗口，被挡下会记进 `pendingMention`，冷却/窗口一到立即补发（否则“普通消息先唤醒、几秒后跟上的 @”会被 90 秒冷却直接吞掉，表现成“直接 @ 也不回”）。`data/shots` 只保留最近 300 张。
-
-**识别引擎（三选一，`ocr.engine`，设置页里选）**
-
-| 引擎 | 做法 | 每帧耗时（实测，RTX 5070 / 1080×1770 截图） | 读得到图片内容 | 说话人 |
-|---|---|---|---|---|
-| `rapidocr`（默认） | 本地 RapidOCR 逐行识别 → 文本差分 | ~2.4s（含每次加载模型） | ✗ | ✗ |
-| `qwen-vl` | 本地 `qwen3-vl:4b-instruct`（Ollama）读成「昵称：内容」行 → 同一套文本差分 | ~0.9–2.1s（模型常驻） | ✓ 例：`图片：蓝色卡通动物站在田地里` | ✓ 昵称 + 绿色气泡记作「我」 |
-| `ds-vision` | 不本地识别，整帧交给唤醒会话自己 `read_image` | 0（省本地算力，但每帧花图片 token） | ✓ 全图 | ✓ 模型自己看 |
-
-- `qwen-vl` 失败（Ollama 没开、没拉模型、显存不够）会自动退回 `rapidocr`，`wechat_poll_status` 的 `fallback` 字段能看到原因；想换模型就改 `ocr.vlModel`（如 `qwen3-vl:8b`），送图宽度 `ocr.vlMaxWidth`（默认 720px，越大越准越慢）。
-- `ds-vision` 相当于老版的「截图帧」模式，唤醒 prompt 会换成识图版：让它先看图，再按「有 @ 必回 / 无 @ 满间隔参与」判断。
-
-**讨论串（thread）**：插件里的一块纯本地状态（内存，不额外调模型/不额外识别）。
-- 有人 @ 你 → 新开一个串，并把「@ 之前那几句」作为上下文写进唤醒 prompt；
-- 串没过期（`autoReply.threadTtlMin`，默认 10 分钟没新消息算散）→ 这个群里后面的新消息都算续聊，可以像真人一样接着回；
-- 串内两条发言至少隔 `autoReply.threadGapSec`（默认 20 秒），**唤醒冷却也按这个走**（续聊不用等 90 秒）——这是“连贯又不刷屏”的关键；
-- 自己主动搭话也算开新串（先登记 pending，真发出去了才成立）；
-- 当前串可以在 `wechat_poll_status` 的 `thread` 字段看到（id / 起因 / 是否存活 / 闲置分钟 / 上下文条数）。
-
-**要不要回由插件判定**：唤醒 prompt 里直接写死这一轮的结论——本轮有 @ → 必须回；无 @ 但讨论串还活着 → 可以接着聊；否则按 `autoReply.noMentionIntervalMin`（默认 30 分钟）决定要不要主动搭一句；都不满足就只 ack。早期版本只把规则写成一句“无 @ 按 noMentionIntervalMin 参与”，模型每轮自己回忆，容易退化成“没 @ 就不回”。
-
-@ 判定本身也做了两层兜底：① 同一句「@昵称」行 30 分钟内只算一次新消息，但算 @ 时会把紧贴新行上方约 3 行也纳入（否则同一个人连着两次 @ 时，第二行被去重吃掉，就会误判成“没 @”）；② 唤醒前会看 inbox 里 5 分钟内还没回过的 `mentionsMe` 条目，只要挂着一条，这轮就升级成“必须回”。
 
 随包带一个技能 `wechat-usb`（`skills/wechat-usb/SKILL.md`），说明标准流程、坐标表与踩坑。
 
-## 两种会话模式（设置页顶部 `multi.enabled`）
-
-多会话这一路改了很多细节（白名单、串续命、私聊开串、发送核对…），它们**只属于多会话模式**。
-关掉开关就是 v0.3.1 的单会话行为，两套逻辑在代码里用 `multiOf(cfg).enabled` 分开：
-
-### 单会话模式（= v0.3.1）
-
-| 行为 | 说明 |
-|---|---|
-| 盯哪个群 | `autoReply.whitelistChats[0]`，不在就搜索进入（`autoOpen`） |
-| 群里没 @ | 按 `noMentionIntervalMin` 自己接一句（v1 本来就这么参与） |
-| 讨论串续命 | 这个群里有任何新消息都算续聊，只看闲置 TTL |
-| 列表扫描 | 不扫；不会进别的会话 |
-| 私聊 | 不单独处理（仍然盯白名单那个群） |
-
-参考实现：`git show v0.3.1:lib/poller.js`（标签 `v0.3.1` 就是单会话基线）。
-
-### 多会话模式（当前默认）
-
-| 行为 | 说明 |
-|---|---|
-| 挑会话 | 停在列表，按未读 + 预览变化发现新会话；群聊必须命中 `whitelistChats`，私聊默认都接 |
-| 开串 | 群：有人 @ / 引用她 / 她自己说话；私聊：一进门就开 |
-| 续命 | 群串只被"对着她说的"续命；私聊每条都续 |
-| 闲置 | 群串 `threadTtlMin`（10 分）、私聊串 `dmThreadTtlMin`（5 分） |
-| 主动开口 | 群里没有 @ 默认**不开口**（`proactiveInGroups` 才开） |
-| 发送 | `wechat_send` 带 `chat` 参数，发送前核对当前会话，发错窗口会被拦下 |
-
-## 多会话调度（v2）
-
-> 当前全流程：[`docs/architecture.md`](docs/architecture.md) · 全流程图：[`docs/full-flow.png`](docs/full-flow.png)
-> 历史设计草案：[`docs/wechat-multichat-design.md`](docs/wechat-multichat-design.md)（未落地时的文字，和实现有出入）
-
-v2 之前只盯 `autoReply.whitelistChats[0]` 一个群。v2 改成「模拟人看微信」：
-
-```
-IDLE   停在聊天列表，每 listScanSec 秒截一张列表（Windows OCR，带坐标）
-       └ 某行未读数比上次大 → 进这个会话
-ENTER  先读当前屏：@ 在屏里就直接判；不在且未读多 → 点「有人@我」并等滚动停
-THREAD 一旦叫醒她（开了讨论串）就钉在这个会话，不再扫列表
-       串过期 / 没叫醒 → 回列表，并给这个会话 perChatCooldownSec 冷却
-```
-
-几条硬规则：
-
-- **单窗口**：同一时刻只处理一个会话，进另一个会话前一定先离开当前；
-- **线程优先**：有活着的讨论串时，列表轮询自动跳过（`listTimer` 里判断 `mode === "thread"`）；
-- **@ 判定放在聊天区**：多会话模式下 OCR 从 `y=180` 起，顶部通知横幅根本进不来；标题直接用“我们点进来的那个会话”，不再让模型猜；
-- **两种串的闲置时间分开**：私聊 `dmThreadTtlMin`（默认 5 分）比群聊 `threadTtlMin`（默认 10 分）短——私聊是一对一在等她回，没下文就早点退出。
-- **私聊一进门就开串**：进出聊天窗口统一用「串活着就留着、串散了就回列表」；私聊里对方每条都续命，群聊只认 @ / 引用 / 她自己说话。
-- **串只被「对着她说的」续命**：@ 她、引用回复她、或她自己刚说完才延长；群里别人的闲聊既不续命也不叫醒，
-  串闲置 `threadTtlMin`（默认 10 分钟）就散，轮询回列表看别的消息；
-- **界面噪声过滤**：`微信：刚刚`、`有人@我`、`[16条]`、`12:22` 这类行在差分前就丢掉；
-- **等滚动停**：点「有人@我」后每 `scrollSampleMs` 截一帧，连续 `scrollStableFrames` 帧哈希一致才算停（上限 `scrollTimeoutMs`），期间探针静默。
-
-配置（全部可选，不写就用默认值）：
-
-```json
-"multi": {
-  "enabled": true,
-  "listScanSec": 15,
-  "perChatCooldownSec": 90,
-  "enterSettleMs": 500,
-  "scrollSampleMs": 400,
-  "scrollStableFrames": 2,
-  "scrollTimeoutMs": 5000,
-  "maxScrollScreens": 3
-}
-```
-
-`multi.enabled: false` 就退回 v1 的单会话行为（死盯 `whitelistChats[0]`）。
-
-**启停联动（重要）**：`wechat_poll_stop` / `/poll{action:"stop"}` 会**同时关掉 `dsh-speak-up` 的「总开关」**
-（`~/.dsh/speak-up-config.json`），`start` 时再一起打开。
-
-> 否则会出现“轮询已经停了，她还在自己找人搭话”——主动搭话也会开讨论串，两个必须一起停、一起开。
-> 不想联动就把 `autoReply.manageSpeakUp` 设成 `false`（默认 `true`）。
-> 插件热重载/卸载（带 token 的 stop）不会动这个开关，避免一次 reload 就把主动搭话静默关掉。
-
-运行时状态：`wechat_poll_status` 里的 `schedule`（`idle` / `thread`）、`current`（当前会话）、`list`（上次列表扫描结果）。
-
 ## 会话轮换（上下文别太长就换新会话）
 
-> 先分清两件事：**DSH 会话 = 上下文容器**（决定模型看到多少历史、花多少 token）；
-> **讨论串 = 微信那边的对话状态**（存在插件的 `poller-threads.json` 里）。
-> 换会话只是为了别让上下文无限长，**跟讨论串没有绑定关系**——换的时候她可能正在某个串里聊，
-> 那条串照样继续，只是后续唤醒交给新会话处理（记忆已经搬过去，串的状态在插件里）。
-
-设置页「会话轮换」里可以配：
+> **DSH 会话 = 上下文容器**；3.0 里它也就是「被叫醒的那个脑子」。
+> 轮换只换容器，微信那边的讨论串/待办状态在引擎里，不受影响。
 
 | 参数 | 默认 | 说明 |
 |---|---|---|
-| 开启自动轮换 | 关 | 每 5 分钟检查一次当前唤醒会话的体量 |
-| 最多轮数 | 300 | 累计多少条用户消息就换 |
-| 最多体积（MB） | 12 | 会话文件多大就换（与轮数满足其一） |
-| 最短存活（分） | 60 | 刚建的新会话不换，防抖 |
-| 两次间隔（分） | 30 | 换完冷却，别连环换 |
-| 同步改「主动搭话」 | 开 | 把 `speak-up-config.json` 的目标会话一起改到新会话 |
-| 同步改「唤醒会话」 | 开 | 把 `autoReply.wakeSessionId` 改到新会话 |
+| `enabled` | 关 | 每 5 分钟检查一次被叫醒会话的体量 |
+| `maxTurns` | 300 | 累计多少条用户消息就换 |
+| `maxSizeMB` | 12 | 会话文件多大就换（与轮数满足其一） |
+| `minAgeMin` | 60 | 刚建的新会话不换，防抖 |
+| `cooldownMin` | 30 | 换完冷却，别连环换 |
+| `switchSpeakUp` | 开 | 把「主动搭话」的目标会话一起改到新会话 |
+| `switchWake` | 开 | 把 `bridge.sessionId` 改到新会话 |
 
-换的时候做四件事：
+换的时候：
 
-1. `sessionController.create({cwd})` 建一个新会话（同一个工作目录）；
-2. **记忆搬家**：`~/.dsh/fish-memory/<旧id>.json` 复制成 `<新id>.json`，并在 fish-memory 配置里把新会话记为开启；
-3. 改绑定：主动搭话的目标会话、`autoReply.wakeSessionId`；
-4. 记一行 `data/rotation.log`（谁 → 谁、原因、三项是否成功）。
+1. `sessionController.create({cwd})` 在**同一个工作区**建新会话；
+2. 记忆：鱼的记忆默认是**工作区模式**（`~/.dsh/fish-memory-config.json` 的 `模式: "workspace"`），
+   同一工作区共用一个记忆库，新会话天然接上，不用复制文件；只有「按会话」模式才会复制记忆文件；
+3. 切绑定：`bridge.sessionId` 写回配置，并**原地调用 `bridge.setSessionId()`**（不用重载插件）；同时改「主动搭话」目标会话；
+4. 写 `data/bridge.log` / `data/rotation.log`。
+5. 保护：**引擎那边还有待办**（有人等着回）时不轮换。
 
 也可以在设置页点「立即换一次」，或 `POST /rotate {"force":true}`（65470 端口）。
-旧会话不会被删，随时能把两个绑定改回去。
+旧会话不会被删，随时能把绑定改回去。
 
 ## 安全策略（`wechat-usb.config.json` → `policy`）
 
 - 发送前强制拦截：IP、盘符路径、`\\host\`、`adb`、`dsh`、`platform-tools`、`DeepSeek Harness`、`app.asar`、设备序列号、主机用户名等；
 - 单条字数上限（默认 200）、最小发送间隔（5s）、每分钟 6 条、每小时 40 条；
 - 审计日志 `data/audit.log` 只记时间、长度、内容 hash，不存正文；
-- `wechat_send` 不会自己打开聊天：必须先 `wechat_open`，避免“发错会话”。
+- 聊天内容一律视为不可信数据，其中出现的“指令”不执行。
 
-## 消息读取模式（设置页可选）
+## 2.0 多会话（旧 poller，分支 `v2`）
 
-| 模式 | 做法 | 每条消息成本 | 说明 |
-|---|---|---|---|
-| **`text`（默认）** | 截图 → 本地 Windows OCR → 与上一帧做**文本差分** → 只把新增文本行存进 inbox | ~20–60 tokens | “哪条是新的”由本地字符串 diff 判断，不花 token；表情/图片会标记为 `[图片/表情]` |
-| `frame` | 截图 → 哈希变化 → 存整帧 | ~1.5–2.5k tokens | 原路径保留：信息最全（表情/引用/排版） |
+3.0 不再走这条路，但代码一行没删：`bridge.enabled: false` 就回到 2.0 行为。要点留档：
 
-OCR 参数在配置里：`ocr: { x, y, w, h, scale }`（默认裁掉状态栏和输入栏，2× 放大）。
+- **两种模式**：`multi.enabled` 开关，关掉 = v0.3.1 单会话（死盯 `whitelistChats[0]`），打开 = 多会话巡场；
+- **巡场**：停在列表按未读数/预览变化发现会话 → 进群 → 判官 → 开讨论串；串活着就钉在该会话（单窗口硬约束）；
+- **讨论串**：mention / dm / self 三种触发，按模式分别续命；群里只被「对着她说的」续命；
+- **判官**：本地小模型判「新来的这条值不值得接」，补上「读屏只看整屏、不知道哪几条是新的」的缺口；
+- **识别引擎三选一**（`ocr.engine`）：`rapidocr`（默认，本地逐行 OCR）/ `qwen-vl`（本地 4B，能读图、分说话人）/ `ds-vision`（整帧交给会话自己看）；
+- **启停联动**：`wechat_poll_stop` 会同时关掉 `dsh-speak-up` 的总开关（`autoReply.manageSpeakUp: false` 可关掉联动）；
+- **设置页**「微信 USB」可改设备、坐标、安全限制、识别引擎、运行状态面板。
 
-## 图形设置页
+参考：`docs/RELEASE-2.0.0.md`、`docs/architecture.md`、`docs/full-flow.png`。
 
-DSH 设置 → **微信 USB**（入口：左下角「更多」→「设置」，快捷键 `Ctrl+Alt+,`）。
+## 配置参考
 
-页面里可改：
-
-- 设备：ADB 路径、序列号、数据目录
-- 坐标：输入框 / 发送 / 搜索图标 / 搜索框 / 第一个搜索结果（5 组 x,y）
-- 安全限制：单条字数、最小间隔、每分钟/每小时上限
-- 发送拦截正则（每行一条）、允许的会话标题（每行一条，空 = 不限制）
-- 按钮：保存 / 重新载入 / 检查连接
-
-保存会原子写回 `wechat-usb.config.json`（先 `.tmp` 再 rename），并立刻被工具读到；「检查连接」会调 `/api/dsh-wechat-usb/status` 显示手机在线状态。
-
-宿主端桥：`GET/POST /api/dsh-wechat-usb/config`、`GET /api/dsh-wechat-usb/status`，**只接受本机回环地址**。
-
-## 改配置（没有图形设置页时的手工方式）
-
-插件配置就是一个 JSON：`<插件目录>/wechat-usb.config.json`。**保存后下一次工具调用即生效**（`loadConfig` 按文件 mtime 热读，不需要重启/重装）。该文件含设备序列号与本机路径，已被 `.gitignore` 排除；仓库里只有 `wechat-usb.config.example.json`。
+配置就是一个 JSON：`<插件目录>/wechat-usb.config.json`。**保存后下一次工具调用即生效**（按文件 mtime 热读，不用重启/重装）。该文件含设备序列号与本机路径，已被 `.gitignore` 排除；仓库里只有 `wechat-usb.config.example.json`。
 
 | 字段 | 作用 |
 |---|---|
-| `adb` / `serial` | adb 路径与目标设备序列号 |
-| `dataDir` | 截图、审计日志、限频状态目录 |
+| `bridge.enabled` / `engineUrl` / `sessionId` / `intervalMs` | 3.0 桥接开关、引擎地址、叫醒哪个会话、轮询间隔（默认 8000ms） |
+| `rotation.*` | 会话轮换（见上表） |
+| `adb` / `serial` / `dataDir` | 仅 2.0 旧 poller 用 |
 | `ime.default` / `ime.inject` | 默认输入法 / 中文注入输入法 |
 | `coords.*` | 输入框、发送、搜索、返回、Tab 等坐标（换分辨率必改） |
-| `policy.maxChars` | 单条字数上限（默认 200） |
-| `policy.minIntervalMs` | 两次发送最小间隔（默认 5000） |
-| `policy.maxPerMinute` / `maxPerHour` | 频率上限（默认 6/分钟、40/小时） |
+| `policy.maxChars` / `minIntervalMs` / `maxPerMinute` / `maxPerHour` | 安全限制 |
 | `policy.blockPatterns` | 发送拦截正则（IP、盘符、adb、序列号、主机名等） |
-| `policy.allowedChats` | 预留：只允许发往的会话标题 |
-| `autoReply.wakeSessionId` | 检测到新消息时唤醒哪个 DSH 会话（设置页「唤醒会话」下拉选择；留空 = 只进 inbox 不唤醒） |
-| `autoReply.wakeCooldownSec` | 两次唤醒的最小间隔（默认 90 秒） |
-| `autoReply.wakeOnImage` | 图片/表情/界面变化是否也唤醒（默认 false：只入 inbox） |
-| `ocr.y` / `ocr.h` | OCR 区域；默认从 y=170 开始，避开聊天标题栏（从 140 开始会把标题切一半，未读数一变就误判新消息） |
+| `multi.*` | 2.0 多会话参数 |
+| `autoReply.*` | 2.0 唤醒/冷却/讨论串参数 |
+| `ocr.*` | 2.0 识别引擎与区域 |
 
-改**代码**（`index.js` / `lib/*`）则需要热重载插件：
+改**代码**需要热重载插件：
 
 ```
 plugin_manager set_bundle target="dsh-wechat-usb" enabled=false
@@ -245,40 +178,39 @@ plugin_manager set_bundle target="dsh-wechat-usb" enabled=true
 
 `wechat_config` 工具可以直接打印当前生效的配置与文件路径。
 
-## 设备假设（换机改 config）
+## 版本与分支
 
-- Honor V10 / Android 10 / EMUI 10 / 1080×2160（坐标按这个分辨率写死，换机必须改 `coords`）；
-- ADB：用 `platform-tools` 里的 `adb`，序列号填 `adb devices` 里那台设备（示例配置留的是占位符 `YOUR_DEVICE_SERIAL`）；
-- 中文注入依赖 ADBKeyboard（IME id `com.android.adbkeyboard/.AdbIME`），用完自动切回默认输入法（`ime.default`）。
+| 分支/标签 | 内容 |
+|---|---|
+| `main`（当前） | **3.0 交接桥接**：引擎当手，DSH 会话当脑子；轮换按工作区记忆 |
+| `v2` | 2.0 多会话巡场（`2.0.0-dev`），插件自己 ADB + OCR + 判官 + 讨论串 |
+| `v0.3.1`（标签） | 单会话基线，死盯一个群 |
+| `v3`（分支） | 曾经的主线分支，内容与 `main` 相同，保留作历史 |
 
-## 版本路线
-
-- **v1.x（当前 `0.3.1`）**：单会话。死盯 `autoReply.whitelistChats` 里的那一个群，逐帧 OCR 判新消息。
-- **v2.0（开发中，已在 `2.0.0-dev`）**：多会话调度。平时停在聊天列表、按**未读数变化**发现新会话，进群确认后开讨论串；
-  串活着就留在该会话不切走（**单窗口是硬约束**）。@ 不在可见区时才点「有人@我」并等滚动停。
-
-  实现见下面「多会话调度（v2）」；当前全流程：[`docs/architecture.md`](docs/architecture.md) ·
-  全流程图：[`docs/full-flow.png`](docs/full-flow.png)
-
-  > 单会话基线已打标签 `v0.3.1`，随时可以 `git checkout v0.3.1` 回滚。
+- 回退 2.0：`git checkout v2`（或从 `v2` 重新装插件），配置里去掉 `bridge`；
+- 回退 1.x：`git checkout v0.3.1`；
+- 3.0 桥接自身回滚：`bridge.enabled=false` + 重启插件，旧 poller 随时能开回去。
 
 ## 目录
 
-- `index.js` — 插件入口（零外部 import；注册工具 + 1 个技能）
-- `lib/core.js` — ADB 操作、守卫、限频、审计
-- `lib/poller.js` — 后台轮询、文本差分、唤醒判定
+- `index.js` — 插件入口（零外部 import；注册工具 + 1 个技能 + 宿主 API）
+- `lib/bridge.js` — 3.0 桥接：轮询待办、叫醒会话、回复/跳过/读链接/主动搭话
+- `lib/rotation.js` — 会话轮换（轮数/体积、记忆搬家、切绑定）
+- `lib/core.js` — ADB 操作、守卫、限频、审计（2.0 旧路径）
+- `lib/poller.js` — 后台轮询、文本差分、唤醒判定（2.0 旧路径）
 - `lib/cli.js` — 独立 CLI：`node lib/cli.js status|open|send|watch|guard`
-- `lib/ocr.ps1` / `lib/ocr_rapid.py` / `lib/vl_ocr.py` — 三种识别引擎
+- `lib/ocr.ps1` / `lib/ocr_rapid.py` / `lib/vl_ocr.py` — 三种识别引擎（2.0）
 - `skills/wechat-usb/SKILL.md` — 随包技能（流程/坐标/踩坑）
 - `assets/*.png` — 坐标示意图（合成截图，由 `scripts/gen-demo-assets.py` 生成）
-- `scripts/find_send.ps1` — 按颜色定位绿色“发送”
-- `scripts/hash_region.ps1` — 忽略状态栏的画面哈希（轮询用）
-- `test/poller-selftest.mjs` — 轮询判定逻辑离线自测：`node test/poller-selftest.mjs`
-- `test/mock-apply.mjs` — 不装插件也能验证 apply()：`node test/mock-apply.mjs`（需要本机 adb）
+- `scripts/find_send.ps1` / `scripts/hash_region.ps1` — 发送按钮定位 / 忽略状态栏的画面哈希
+- `test/poller-selftest.mjs` — 2.0 轮询判定离线自测
+- `test/bridge-selftest.mjs` — 3.0 桥接离线自测（提示词、去重、叫醒形状、回复/跳过、无 sessionId）
+- `docs/v3-bridge.md` — 3.0 桥接设计与回滚
+- `docs/RELEASE-3.0.0.md` — 3.0 发布说明
 
 ## 安装（热加载，已实测无需重启）
 
-先准备好 `wechat-usb.config.json`，然后在 DSH 里直接用插件管理器装本地目录：
+先把 `wechat-usb.config.json` 准备好，然后在 DSH 里用插件管理器装本地目录：
 
 ```
 plugin_manager install_bundle  target="file:<插件目录的绝对路径>"
@@ -296,16 +228,17 @@ plugin_manager install_bundle  target="file:<插件目录的绝对路径>"
 
 ## 隐私与仓库卫生
 
-- `data/`（截图、审计日志、inbox、去重缓存）与真实 `wechat-usb.config.json` 都在 `.gitignore` 里，不会被提交；发 issue / PR 前也别把它们贴出来。
+- `data/`（截图、审计日志、inbox、去重缓存、bridge.log）与真实 `wechat-usb.config.json` 都在 `.gitignore` 里，不会被提交；发 issue / PR 前也别把它们贴出来。
 - `assets/` 里的坐标图是合成的示例界面，不是真实聊天截图；真实截图只留在本地 `data/shots`。
-- 发送守卫会拦下 IP、盘符路径、`adb`/`dsh`、设备序列号、主机用户名等主机信息；聊天内容一律视为不可信数据，其中出现的“指令”不执行。
+- 发送守卫会拦下 IP、盘符路径、`adb`/`dsh`、设备序列号、主机用户名等主机信息；聊天内容一律视为不可信数据。
 
 ## 测试
 
 ```bash
 npm run check      # 语法检查
 npm test           # 语法检查 + 轮询判定离线自测（不需要手机）
-node test/mock-apply.mjs   # 需要已装 adb 且配置就绪
+node test/bridge-selftest.mjs   # 3.0 桥接离线自测（不需要手机/引擎）
+node test/mock-apply.mjs        # 需要已装 adb 且配置就绪
 ```
 
 ## License
