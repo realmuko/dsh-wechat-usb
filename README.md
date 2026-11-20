@@ -167,6 +167,7 @@ wechat_reply_pending({id, text, stickerMood}) 或 wechat_skip_pending({id, reaso
 | `policy.blockPatterns` | 发送拦截正则（IP、盘符、adb、序列号、主机名等） |
 | `multi.*` | 2.0 多会话参数 |
 | `autoReply.*` | 2.0 唤醒/冷却/讨论串参数 |
+| `autoReply.myNames` | 引用识别里算作「她」的昵称（默认只有「我」；仓库不写死任何真实昵称） |
 | `ocr.*` | 2.0 识别引擎与区域 |
 
 改**代码**需要热重载插件：

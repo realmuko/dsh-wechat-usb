@@ -556,8 +556,8 @@ openThread(chat, trigger)      trigger = mention | self | dm
 | `autoReply.proactiveQuietFrom/To` | 23:30 / 08:00 | 同 | 夜间安静期 |
 | `autoReply.proactiveMaxPerHour` | 3 | 3 | 每小时主动次数 |
 | `autoReply.proactiveDmBlacklist` | [] | [] | 不主动去的私聊 |
-| `autoReply.whitelistChats` | []（不限） | 摸鱼…、群… | 群聊准入名单 |
-| `autoReply.mentionKeywords` | — | @小助手 / @小助手 / @小助手 | @ 命中词 |
+| `autoReply.whitelistChats` | []（不限） | 摸鱼…、爬山… | 群聊准入名单 |
+| `autoReply.mentionKeywords` | — | @我 / @昵称 | @ 命中词 |
 | `autoReply.manageSpeakUp` | true | **false** | 启停是否联动 speak-up |
 | `autoReply.dryRun` | false | false | 测试模式（不发真消息） |
 | `autoReply.autoOpen` | true | true | 单窗口自动切回目标会话 |
@@ -645,6 +645,6 @@ openThread(chat, trigger)      trigger = mention | self | dm
 | `9b1195d` | 串永远散不掉 | 自己的绿气泡只在 3 分钟内算「对着她说」 |
 | `537141a` | 热重载后 `/poll` 仍旧数据 | api.js 走 `pollerRef.current` |
 | `2c358c5` | 锁屏 8 小时空转、卡搜索页 | 亮屏检查；FTS 双 back + am start |
-| `f957281` | 会退到桌面、群里 @ 漏、发送慢 2s | 像素探针判页；@ 改为整屏按时间；发送核对走内存缓存 |
+| `f957281` | 会退到桌面、群里的 @ 漏、发送慢 2s | 像素探针判页；@ 改为整屏按时间；发送核对走内存缓存 |
 
 更早的 2.0 变更（多会话、串、轮换、判官）见 `CHANGELOG.md` 与 `docs/RELEASE-2.0.0.md`。
